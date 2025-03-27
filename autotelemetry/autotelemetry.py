@@ -521,100 +521,76 @@ def _shutdown():
 
 def _function_decorator(func: F) -> F:
     """
-    Décorateur qui trace automatiquement les fonctions.
-    
-    Args:
-        func: La fonction à décorer
-        
-    Returns:
-        La fonction décorée
+    Decorator that automatically creates spans for functions.
+    It will set span name to the function name and add relevant attributes.
     """
-    if _GLOBAL_CLIENT is None:
-        return func
-        
-    # Éviter de décorer les fonctions déjà décorées ou internes
-    if hasattr(func, '_auto_instrumented') or func.__name__.startswith('_'):
-        return func
-        
+    import functools
+    import inspect
+    import threading
+
+    # Create thread-local storage for call stack tracking
+    _local = threading.local()
+    
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        # Obtenir le tracer
-        if _GLOBAL_CLIENT is not None:
-            # Tracer la fonction avec son nom qualifié
-            module_name = func.__module__
-            function_name = func.__qualname__
-            span_name = f"{module_name}.{function_name}"
+        # Initialize call stack for this thread if it doesn't exist
+        if not hasattr(_local, 'call_stack'):
+            _local.call_stack = set()
             
-            # Créer des attributs de base pour la span
-            attributes = {
-                "function.module": module_name,
-                "function.name": function_name,
-            }
+        # Get function's qualified name
+        func_name = f"{func.__module__}.{func.__qualname__}"
+        
+        # Check if we're already tracing this function to prevent recursion
+        if func_name in _local.call_stack:
+            # Already tracing this function, just execute it without creating a new span
+            return func(*args, **kwargs)
             
-            # Ajouter des informations sur les arguments si possible
+        # Add to call stack before creating span
+        _local.call_stack.add(func_name)
+        
+        try:
+            # Get function signature and argument values
             try:
-                # Capturer les noms des paramètres
                 sig = inspect.signature(func)
-                params = sig.parameters
-                
-                # Ajouter le nombre d'arguments
-                attributes["function.args.count"] = len(args)
-                attributes["function.kwargs.count"] = len(kwargs)
-                
-                # Ajouter le type des arguments positionnels
-                for i, arg in enumerate(args):
-                    if i < len(params):
-                        param_name = list(params.keys())[i]
-                        attributes[f"function.arg.{param_name}.type"] = type(arg).__name__
-                
-                # Ajouter le type des arguments nommés
-                for key, value in kwargs.items():
-                    attributes[f"function.kwarg.{key}.type"] = type(value).__name__
-                    
+                bound_args = sig.bind(*args, **kwargs)
+                bound_args.apply_defaults()
+                arg_dict = dict(bound_args.arguments)
+                # Convert non-primitive types to strings to prevent serialization issues
+                for k, v in arg_dict.items():
+                    if not isinstance(v, (str, int, float, bool, type(None))):
+                        arg_dict[k] = f"{type(v).__name__}"
             except Exception:
-                # Ignorer les erreurs dans l'analyse des arguments
-                pass
-            
-            with _GLOBAL_CLIENT.tracer.start_as_current_span(span_name, attributes=attributes) as span:
+                # If we can't inspect arguments, just use empty dict
+                arg_dict = {}
+
+            # Get the tracer and create a span
+            if _GLOBAL_CLIENT is None:
+                return func(*args, **kwargs)
+                
+            tracer = _GLOBAL_CLIENT.tracer
+            with tracer.start_as_current_span(
+                name=func_name,
+                attributes={
+                    "code.function": func.__name__,
+                    "code.namespace": func.__module__,
+                    "code.arguments": str(arg_dict)
+                }
+            ) as span:
+                # Execute the wrapped function
                 try:
-                    # Exécuter la fonction
                     result = func(*args, **kwargs)
-                    
-                    # Tracer le type du résultat
-                    if result is not None:
-                        span.set_attribute("function.result.type", type(result).__name__)
-                    
-                    # Ajouter des attributs spécifiques pour les DataFrame pandas
-                    if hasattr(result, "shape") and hasattr(result, "columns"):
-                        try:
-                            span.set_attribute("pandas.dataframe.rows", result.shape[0])
-                            span.set_attribute("pandas.dataframe.columns", result.shape[1])
-                        except (AttributeError, IndexError):
-                            pass
-                    
                     return result
                 except Exception as e:
-                    # Enregistrer l'exception dans la span
-                    if span is not None:
-                        span.record_exception(e)
-                        span.set_status(Status(
-                            status_code=StatusCode.ERROR,
-                            description=str(e)
-                        ))
-                    
-                    # Logger l'exception
-                    if _GLOBAL_CLIENT is not None:
-                        logger = _GLOBAL_CLIENT.get_logger()
-                        logger.exception(f"Exception dans {span_name}: {str(e)}")
-                    
-                    # Propager l'exception
+                    # Record the exception in the span
+                    span.record_exception(e)
+                    # Re-raise the exception
                     raise
-        else:
-            # Si pas de client global, simplement exécuter la fonction
-            return func(*args, **kwargs)
-    
-    # Marquer la fonction comme déjà décorée
-    wrapper._auto_instrumented = True  # type: ignore
+        finally:
+            # Always remove from call stack, even if an exception occurs
+            _local.call_stack.remove(func_name)
+
+    # Mark this function as instrumented to avoid double instrumentation
+    wrapper._auto_instrumented = True
     
     return cast(F, wrapper)
 
@@ -647,6 +623,10 @@ def _instrument_module(module):
         try:
             attr = getattr(module, attr_name)
             
+            # Skip already instrumented functions
+            if hasattr(attr, '_auto_instrumented'):
+                continue
+                
             # Instrumenter seulement les fonctions et méthodes
             if inspect.isfunction(attr) or inspect.ismethod(attr):
                 setattr(module, attr_name, _function_decorator(attr))
@@ -659,6 +639,10 @@ def _instrument_module(module):
                         
                     try:
                         method = getattr(attr, method_name)
+                        # Skip already instrumented methods
+                        if hasattr(method, '_auto_instrumented'):
+                            continue
+                            
                         if inspect.isfunction(method) or inspect.ismethod(method):
                             setattr(attr, method_name, _function_decorator(method))
                     except (AttributeError, TypeError):

@@ -10,16 +10,21 @@ import logging
 import pandas as pd
 import numpy as np
 import time
+import os
+import sys
+
+# Ajouter le répertoire parent au chemin d'importation
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import de la bibliothèque avec configuration avancée
-from autotelemetry import auto_instrument, LogLevel, Environment
+from autotelemetry import SimpleObservabilityClient, LogLevel, Environment
 
-# Configuration avancée de l'auto-instrumentation
-client = auto_instrument(
+# Configuration avancée avec SimpleObservabilityClient (sans auto-instrumentation)
+client = SimpleObservabilityClient(
     service_name="demo-advanced",
     service_version="1.0.0",
     environment=Environment.DEVELOPMENT,
-    prometheus_port=9090,
+    prometheus_port=9091,  # Port différent pour éviter les conflits
     log_level=LogLevel.DEBUG,
     additional_attributes={
         "team": "data-engineering",
@@ -37,7 +42,7 @@ logger = client.get_logger()
 def simulate_data_pipeline():
     """Simule un pipeline de données complet."""
     try:
-        logger.info("Démarrage du pipeline de données", extra={"pipeline_id": "demo-123"})
+        logger.info("Démarrage du pipeline de données", extra={"data": {"pipeline_id": "demo-123"}})
         
         # Étape 1: Extraction
         data = extract_data()
@@ -69,7 +74,7 @@ def extract_data():
     
     # En production, ce log serait automatiquement structuré en JSON
     logger.info(f"Données extraites: {len(data)} lignes", 
-               extra={"rows_count": len(data), "stage": "extract"})
+               extra={"data": {"rows_count": len(data), "stage": "extract"}})
     return data
 
 def transform_data(df):
@@ -88,18 +93,18 @@ def transform_data(df):
     
     removed_count = len(df) - len(df_clean)
     
-    # Logging structuré avec contexte enrichi
-    with logger.with_data(stage="transform", operation="filter_outliers"):
-        logger.data(
-            level=logging.INFO,
-            msg=f"Données transformées: {len(df_clean)} lignes",
-            data={
-                "input_rows": len(df),
-                "output_rows": len(df_clean),
-                "removed_rows": removed_count,
-                "removal_ratio": removed_count / len(df) if len(df) > 0 else 0
-            }
-        )
+    # Logging structuré
+    logger.info(
+        f"Données transformées: {len(df_clean)} lignes",
+        extra={"data": {
+            "stage": "transform",
+            "operation": "filter_outliers",
+            "input_rows": len(df),
+            "output_rows": len(df_clean),
+            "removed_rows": removed_count,
+            "removal_ratio": removed_count / len(df) if len(df) > 0 else 0
+        }}
+    )
     
     return df_clean
 
@@ -116,7 +121,7 @@ def load_data(df):
     
     # En production, ce serait automatiquement formaté en JSON
     logger.info("Données chargées avec succès", 
-               extra={"categories_count": len(grouped), "stage": "load"})
+               extra={"data": {"categories_count": len(grouped), "stage": "load"}})
     
     return True
 
@@ -124,6 +129,9 @@ if __name__ == "__main__":
     # Le démarrage est automatiquement loggé
     result = simulate_data_pipeline()
     print(result)
+    
+    # Fermer proprement le client d'observabilité
+    client.shutdown()
     
     # En environnement de production, vous verriez ici tous les logs en format JSON standardisé
     # avec des champs cohérents pour faciliter l'analyse et la recherche 
