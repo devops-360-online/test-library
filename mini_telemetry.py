@@ -8,6 +8,12 @@ Cette bibliothèque simplifie l'utilisation d'OpenTelemetry en:
 2. Facilitant la corrélation entre ces signaux
 3. Exposant une API simple pour les développeurs
 
+LES DONNÉES SONT EXPORTÉES UNIQUEMENT VERS STDOUT:
+- Aucun composant externe n'est nécessaire
+- Tout apparaît directement dans la console
+- Parfait pour le développement et le debug
+- Un autre composant séparé peut collecter la sortie standard si nécessaire
+
 Les développeurs sont responsables de l'instrumentation de leur code,
 la bibliothèque ne fait que configurer et exposer les outils.
 """
@@ -100,14 +106,16 @@ class TelemetryTools:
         
         Le traçage capture le chemin d'exécution à travers le code, les services
         et les systèmes distribués, sous forme de "spans".
+        
+        Export exclusivement vers stdout - aucun composant externe requis.
         """
         # Étape 1: Créer un provider de trace avec notre ressource
         # Le TracerProvider est le point d'entrée pour la création de tracers
         trace_provider = TracerProvider(resource=self.resource)
         
         # Étape 2: Configurer l'exportation des traces
-        # ConsoleSpanExporter affiche les spans dans la sortie standard
-        # Utile pour le développement et le débogage
+        # ConsoleSpanExporter affiche les spans dans la sortie standard (stdout)
+        # Aucune configuration supplémentaire ou composant externe n'est nécessaire
         console_exporter = ConsoleSpanExporter()
         
         # BatchSpanProcessor collecte les spans en mémoire et les exporte par lots
@@ -135,9 +143,12 @@ class TelemetryTools:
         
         Les métriques capturent des données numériques comme des compteurs,
         des jauges et des histogrammes pour mesurer la performance et les états.
+        
+        Export exclusivement vers stdout - aucun composant externe requis.
         """
         # Étape 1: Configurer l'exportation des métriques
-        # ConsoleMetricExporter affiche les métriques dans la sortie standard
+        # ConsoleMetricExporter affiche les métriques dans la sortie standard (stdout)
+        # Aucune configuration supplémentaire ou composant externe n'est nécessaire
         console_exporter = ConsoleMetricExporter()
         
         # PeriodicExportingMetricReader collecte et exporte les métriques périodiquement
@@ -167,6 +178,8 @@ class TelemetryTools:
         
         L'intégration permet d'ajouter automatiquement les identifiants
         de trace et de span aux entrées de log correspondantes.
+        
+        Export exclusivement vers stdout - aucun composant externe requis.
         """
         # Étape 1: Créer un formateur de logs
         if use_json:
@@ -182,6 +195,8 @@ class TelemetryTools:
             )
         
         # Étape 2: Configurer le handler de base (stdout)
+        # Les logs sont envoyés directement à la sortie standard
+        # Aucun composant externe n'est nécessaire
         handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(formatter)
         
@@ -298,6 +313,10 @@ class JsonLogFormatter(logging.Formatter):
 
 # ===== Exemple d'utilisation =====
 if __name__ == "__main__":
+    print("\n=== DÉMARRAGE DE MINI-TELEMETRY ===")
+    print("Toutes les données d'observabilité sont exportées vers stdout")
+    print("Aucun composant externe n'est nécessaire\n")
+    
     # Initialiser les outils de télémétrie
     telemetry = TelemetryTools(
         service_name="exemple-service",
@@ -402,4 +421,6 @@ if __name__ == "__main__":
     
     logger.info("=== Test terminé ===")
     
-    # Les traces, logs et métriques seront affichés dans la console 
+    print("\n=== TERMINÉ ===")
+    print("Toutes les traces, logs et métriques ont été affichés dans la console")
+    print("Un autre composant peut collecter cette sortie si nécessaire") 

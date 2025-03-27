@@ -260,6 +260,26 @@ logger = telemetry.get_logger("mon.module")
 # 3. Utiliser ces outils dans votre code
 ```
 
+## Exportation des données
+
+**Mini-Telemetry exporte exclusivement vers stdout (la sortie standard)**:
+
+- **Aucun composant externe requis** pour visualiser les données
+- **Tout apparaît directement dans la console/terminal**
+- **Parfait pour le développement et le debug**
+- Un autre composant séparé peut collecter cette sortie si nécessaire (Filebeat, Fluentd, etc.)
+
+Format des sorties:
+1. **Logs**: Texte formaté ou JSON, avec IDs de trace
+2. **Traces**: JSON formaté avec structure de span complète
+3. **Métriques**: JSON formaté avec valeurs et timestamps
+
+Cette approche minimaliste permet de:
+- Commencer immédiatement sans infrastructure complexe
+- Voir toutes les données au même endroit
+- Utiliser les outils standard de redirection UNIX si nécessaire (`> file.log`)
+- Intégrer facilement à des conteneurs Docker ou des environnements cloud
+
 ## Guide des concepts OpenTelemetry
 
 ### Traces et Spans
@@ -390,9 +410,11 @@ Voir le fichier [mini_telemetry.py](mini_telemetry.py) pour un exemple complet d
 - Instrumentation manuelle
 - Corrélation entre traces, métriques et logs
 
-## Extension à d'autres backends
+## Extension à d'autres backends (optionnel)
 
-Par défaut, les traces, logs et métriques sont envoyés à la console, mais il est facile d'étendre vers:
+Par défaut, les traces, logs et métriques sont envoyés **uniquement à la console (stdout)**, sans nécessiter de composants externes.
+
+Si vous souhaitez ultérieurement exporter vers d'autres systèmes, voici comment procéder:
 
 - **Jaeger/Zipkin** pour les traces
 - **Prometheus** pour les métriques
@@ -408,6 +430,8 @@ otlp_exporter = OTLPSpanExporter(endpoint="http://collector:4317")
 span_processor = BatchSpanProcessor(otlp_exporter)
 trace_provider.add_span_processor(span_processor)
 ```
+
+Cette extension est entièrement optionnelle et n'est recommandée que lorsque votre projet atteint une maturité nécessitant une infrastructure d'observabilité complète.
 
 ## Ressources
 

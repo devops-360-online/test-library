@@ -53,6 +53,24 @@ Nous avons créé une bibliothèque minimaliste qui :
 2. **Expose les interfaces standards** pour l'instrumentation
 3. **Configure la corrélation** entre traces, logs et métriques
 4. **Laisse le contrôle aux développeurs** sur l'instrumentation
+5. **Exporte exclusivement vers stdout** (aucun composant externe requis)
+
+## Exportation "Zero-Infra"
+
+Un principe fondamental de Mini-Telemetry:
+
+- **Export exclusif vers stdout** (la sortie standard)
+- **Aucun composant externe requis** pour voir les données
+- **Tout apparaît directement dans le terminal/console**
+- **"Ce que vous voyez est ce que vous obtenez"**
+
+![Flux d'exportation simplifié](https://mermaid.ink/img/pako:eNp1kV9PgzAUxb9K03cweAGCDI2uxMQ4g4kDX3ygXGnNgNK0HWEsxO-uMBzO5QX6O7-ec9uDyAtBIQW5k_L1jdfYlArFZ1OhcdFV-cEbDMZLJZtDJpSBDzEOYnEu1PKNPazwXm6RGVGDVlUrtMGL_DfPqCPkG0h_eSRSNTnS66VJFz3J1ZP-OXAOH16hd6V1HVYWCx_tULO21Rp-rHWCaxSyFBw6-tL1pqUcqqvQ_6EFXFPvV_iXRTB4JKPYGw-HYRQOxyEh0eiRPM9kHo-cW6M4kCIrrEKnrTm_3cR-Bveh4mAbOMXKJkfWlvQG0tJ2f6x-6p-Q4-4j0pLbkKa0MqZJSBC4E8-NXJLQnQbXhDRdNvpGCylz2PahJJt6P5TQ7LsHxYA2QpVQaCOaI6SKF9C5U8AxBDTVGXSZbqQqoOtDrQ-dqr3HyxHSEgCtuIPWOA_e7m7pOG73DVAW6y4?type=png)
+
+Cette approche permet de:
+- **Démarrer immédiatement** sans infrastructure complexe
+- **Voir toutes les données** dans le même flux
+- **Intégrer facilement** avec les outils standard Unix
+- **Collecter optionnellement** avec un outil externe quand nécessaire
 
 ## Fonctionnement de Mini-Telemetry
 
@@ -188,29 +206,32 @@ Notre bibliothèque configure automatiquement cette corrélation.
 
 ## Visualisation (Backends)
 
-Avec OpenTelemetry, vous pouvez envoyer vos données vers différents outils :
+Avec notre approche "zero-infra":
 
+- **Terminal/Console**: Visualisation directe et immédiate
+- **Redirection UNIX**: `python votre_script.py > logs.txt`
+- **Collecte optionnelle**: Un autre composant séparé peut collecter stdout
+
+Si vous souhaitez éventuellement étendre vers des outils spécialisés:
 - **Traces**: Jaeger, Zipkin, Tempo
 - **Métriques**: Prometheus, Grafana
 - **Logs**: Elasticsearch, Loki
-- **Tout-en-un**: Dynatrace, Datadog, New Relic, Elastic APM
 
-Notre bibliothèque supporte facilement l'ajout de ces exporteurs.
+> L'extension est entièrement optionnelle et peut être ajoutée progressivement lorsque vos besoins grandissent.
 
 ## Prochaines Étapes
 
-1. **Essai en développement** :
-   - Utiliser Mini-Telemetry localement (logs vers console)
+1. **Adoption immédiate** :
+   - Utiliser Mini-Telemetry sans aucune infrastructure supplémentaire
    - Instrumenter progressivement les parties critiques
 
-2. **Configuration d'un collecteur** :
-   - Installer OpenTelemetry Collector
-   - Configurer l'export vers nos outils d'analyse
+2. **Standardisation** :
+   - Adopter des conventions de nommage cohérentes
+   - Utiliser les mêmes attributs dans toute l'organisation
 
-3. **Déploiement graduel** :
-   - Services non-critiques d'abord
-   - Analyse des données et ajustements
-   - Extension à tous les services
+3. **Évolution progressive** (si nécessaire) :
+   - Commencer avec l'export vers stdout uniquement
+   - Ajouter des exportateurs pour des systèmes spécialisés au besoin
 
 ## Conclusion
 
@@ -220,8 +241,9 @@ Mini-Telemetry facilite l'adoption d'OpenTelemetry en :
 2. **Exposant des interfaces simples et standardisées**
 3. **Automatisant la corrélation** entre traces, métriques et logs
 4. **Laissant le contrôle aux développeurs** sur l'instrumentation
+5. **Fonctionnant sans infrastructure externe** (export vers stdout)
 
-**Résultat** : Une observabilité complète avec un minimum d'effort d'intégration.
+**Résultat** : Une observabilité complète avec un minimum d'effort d'intégration et aucun besoin d'infrastructure supplémentaire.
 
 ## Questions ?
 
