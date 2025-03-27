@@ -708,6 +708,39 @@ def _setup_data_science_instrumentation():
     if _GLOBAL_CLIENT is None:
         return
     
+    # Créer des métriques standards pour le traitement de données
+    data_metrics = {
+        "raw_rows_count": _GLOBAL_CLIENT.create_counter(
+            name="data.raw.rows",
+            description="Nombre total de lignes de données brutes traitées",
+            unit="1"
+        ),
+        "processed_rows_count": _GLOBAL_CLIENT.create_counter(
+            name="data.processed.rows",
+            description="Nombre total de lignes de données traitées",
+            unit="1"
+        ),
+        "filtered_rows_count": _GLOBAL_CLIENT.create_counter(
+            name="data.filtered.rows",
+            description="Nombre total de lignes filtrées",
+            unit="1"
+        ),
+        "processing_time": _GLOBAL_CLIENT.create_histogram(
+            name="data.processing.time",
+            description="Temps de traitement des données",
+            unit="ms"
+        ),
+        "data_size": _GLOBAL_CLIENT.create_histogram(
+            name="data.size",
+            description="Taille des données traitées",
+            unit="By"
+        )
+    }
+    
+    # Stocker les métriques globalement pour y accéder depuis les décorateurs
+    global _DATA_METRICS
+    _DATA_METRICS = data_metrics
+    
     # Instrumenter Pandas
     try:
         import pandas
@@ -718,12 +751,32 @@ def _setup_data_science_instrumentation():
         @functools.wraps(original_read_csv)
         def patched_read_csv(*args, **kwargs):
             if _GLOBAL_CLIENT is not None:
+                start_time = time.time()
                 with _GLOBAL_CLIENT.tracer.start_as_current_span("pandas.read_csv") as span:
                     try:
                         result = original_read_csv(*args, **kwargs)
                         if hasattr(result, "shape"):
-                            span.set_attribute("pandas.rows", result.shape[0])
-                            span.set_attribute("pandas.columns", result.shape[1])
+                            rows, cols = result.shape
+                            span.set_attribute("pandas.rows", rows)
+                            span.set_attribute("pandas.columns", cols)
+                            
+                            # Enregistrer les métriques de données
+                            _DATA_METRICS["raw_rows_count"].add(rows)
+                            _DATA_METRICS["processed_rows_count"].add(rows)
+                            
+                            # Estimer la taille mémoire approximative
+                            if hasattr(result, "memory_usage"):
+                                try:
+                                    memory_bytes = result.memory_usage(deep=True).sum()
+                                    span.set_attribute("pandas.memory_bytes", memory_bytes)
+                                    _DATA_METRICS["data_size"].record(memory_bytes)
+                                except:
+                                    pass
+                            
+                            # Enregistrer le temps de traitement
+                            processing_time = (time.time() - start_time) * 1000
+                            _DATA_METRICS["processing_time"].record(processing_time)
+                            
                         return result
                     except Exception as e:
                         if span:
@@ -738,7 +791,87 @@ def _setup_data_science_instrumentation():
         
         pandas.read_csv = patched_read_csv
         
-        # Instrumenter d'autres fonctions pandas...
+        # Patch pour DataFrame.filter
+        original_filter = pandas.DataFrame.filter
+        
+        @functools.wraps(original_filter)
+        def patched_filter(self, *args, **kwargs):
+            if _GLOBAL_CLIENT is not None:
+                with _GLOBAL_CLIENT.tracer.start_as_current_span("pandas.DataFrame.filter") as span:
+                    try:
+                        input_rows = len(self)
+                        span.set_attribute("pandas.input_rows", input_rows)
+                        
+                        result = original_filter(self, *args, **kwargs)
+                        
+                        output_rows = len(result)
+                        span.set_attribute("pandas.output_rows", output_rows)
+                        span.set_attribute("pandas.filtered_rows", input_rows - output_rows)
+                        
+                        # Enregistrer les métriques
+                        _DATA_METRICS["processed_rows_count"].add(output_rows)
+                        _DATA_METRICS["filtered_rows_count"].add(input_rows - output_rows)
+                        
+                        return result
+                    except Exception as e:
+                        if span:
+                            span.record_exception(e)
+                            span.set_status(Status(
+                                status_code=StatusCode.ERROR,
+                                description=str(e)
+                            ))
+                        raise
+            else:
+                return original_filter(self, *args, **kwargs)
+        
+        # Attention, ceci peut être intrusif - à utiliser prudemment
+        # pandas.DataFrame.filter = patched_filter
+        
+        # Patch pour les opérations de traitement courantes
+        for method_name in ["groupby", "merge", "join", "concat", "sort_values"]:
+            if hasattr(pandas, method_name):
+                original_method = getattr(pandas, method_name)
+                
+                @functools.wraps(original_method)
+                def make_patched_method(original, name):
+                    def patched_method(*args, **kwargs):
+                        if _GLOBAL_CLIENT is not None:
+                            start_time = time.time()
+                            with _GLOBAL_CLIENT.tracer.start_as_current_span(f"pandas.{name}") as span:
+                                try:
+                                    # Capturer des infos sur les entrées
+                                    if args and hasattr(args[0], "shape"):
+                                        span.set_attribute(f"pandas.input_rows", args[0].shape[0])
+                                    
+                                    result = original(*args, **kwargs)
+                                    
+                                    # Capturer des infos sur le résultat
+                                    if hasattr(result, "shape"):
+                                        span.set_attribute(f"pandas.output_rows", result.shape[0])
+                                        
+                                        # Enregistrer les métriques
+                                        _DATA_METRICS["processed_rows_count"].add(result.shape[0])
+                                    
+                                    # Enregistrer le temps de traitement
+                                    processing_time = (time.time() - start_time) * 1000
+                                    _DATA_METRICS["processing_time"].record(processing_time)
+                                    span.set_attribute("processing_time_ms", processing_time)
+                                    
+                                    return result
+                                except Exception as e:
+                                    if span:
+                                        span.record_exception(e)
+                                        span.set_status(Status(
+                                            status_code=StatusCode.ERROR,
+                                            description=str(e)
+                                        ))
+                                    raise
+                        else:
+                            return original(*args, **kwargs)
+                    return patched_method
+                
+                # Remplacer la méthode originale
+                setattr(pandas, method_name, make_patched_method(original_method, method_name))
         
     except ImportError:
         # Pandas n'est pas installé
@@ -746,14 +879,52 @@ def _setup_data_science_instrumentation():
     
     # Instrumenter NumPy
     try:
-        import numpy
-        # Instrumenter les opérations numpy...
+        import numpy as np
+        
+        # Patch pour les opérations numpy courantes qui traitent des données
+        for func_name in ["mean", "median", "std", "var", "min", "max"]:
+            if hasattr(np, func_name):
+                original_func = getattr(np, func_name)
+                
+                @functools.wraps(original_func)
+                def make_patched_func(original, name):
+                    def patched_func(*args, **kwargs):
+                        if _GLOBAL_CLIENT is not None:
+                            start_time = time.time()
+                            with _GLOBAL_CLIENT.tracer.start_as_current_span(f"numpy.{name}") as span:
+                                try:
+                                    # Capturer la taille des données d'entrée
+                                    if args and hasattr(args[0], "size"):
+                                        data_size = args[0].size
+                                        span.set_attribute("numpy.input_size", data_size)
+                                        
+                                        # Enregistrer les métriques
+                                        _DATA_METRICS["processed_rows_count"].add(data_size)
+                                    
+                                    result = original(*args, **kwargs)
+                                    
+                                    # Enregistrer le temps de traitement
+                                    processing_time = (time.time() - start_time) * 1000
+                                    _DATA_METRICS["processing_time"].record(processing_time)
+                                    span.set_attribute("processing_time_ms", processing_time)
+                                    
+                                    return result
+                                except Exception as e:
+                                    if span:
+                                        span.record_exception(e)
+                                        span.set_status(Status(
+                                            status_code=StatusCode.ERROR,
+                                            description=str(e)
+                                        ))
+                                    raise
+                        else:
+                            return original(*args, **kwargs)
+                    return patched_func
+                
+                # Remplacer la fonction originale
+                # Note: Cette approche est intrusive, utiliser avec prudence
+                # setattr(np, func_name, make_patched_func(original_func, func_name))
+        
     except ImportError:
-        pass
-    
-    # Instrumenter Scikit-learn
-    try:
-        import sklearn
-        # Instrumenter les estimateurs scikit-learn...
-    except ImportError:
+        # NumPy n'est pas installé
         pass 
