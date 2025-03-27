@@ -15,7 +15,12 @@ import pandas as pd
 import numpy as np
 import time
 import random
+import sys
 from datetime import datetime
+
+# Ajouter le répertoire parent au chemin d'importation
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from autotelemetry import auto_instrument, LogLevel, Environment
 

@@ -12,7 +12,7 @@ setup(
         "opentelemetry-sdk>=1.12.0",
         "opentelemetry-exporter-otlp-proto-grpc>=1.12.0",
         "prometheus-client>=0.14.1",
-        "opentelemetry-exporter-prometheus>=1.12.0"
+        "opentelemetry-exporter-prometheus>=0.33b0"
     ],
     extras_require={
         "dev": [
