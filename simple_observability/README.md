@@ -1,15 +1,6 @@
 # Simple Observability
 
-A Python library that simplifies the use of OpenTelemetry for metrics, logs, and traces in data processing applications.
-
-## Features
-
-- **One-line setup** for all three pillars of observability (metrics, logs, traces)
-- **Data-specific metrics** with pre-configured counters, gauges, and histograms
-- **Automatic context propagation** between logs and traces
-- **Decorators** for easy function instrumentation
-- **Prometheus integration** for metrics visualization
-- **OTLP support** for sending telemetry to collection backends
+Bibliothèque d'auto-instrumentation pour standardiser les métriques, logs et traces avec une seule ligne de code.
 
 ## Installation
 
@@ -17,107 +8,107 @@ A Python library that simplifies the use of OpenTelemetry for metrics, logs, and
 pip install simple_observability
 ```
 
-## Quick Start
+## Utilisation
+
+L'utilisation est extrêmement simple - ajoutez seulement une ligne à votre code :
 
 ```python
-from simple_observability import ObservabilityClient
-import pandas as pd
+# Une seule ligne pour activer toute l'observabilité
+from simple_observability import auto_instrument
+auto_instrument(service_name="mon-service")
 
-# Initialize the observability client
-obs = ObservabilityClient(service_name="data-pipeline")
-
-# Get a logger
-logger = obs.get_logger()
-
-# Use the data processing decorator
-@obs.trace_data_processing()
+# Votre code existant reste inchangé et est automatiquement instrumenté
 def process_data(df):
-    logger.info(f"Processing {len(df)} rows of data")
-    # Your data processing logic here
-    return df.dropna()
-
-# Track a task with metrics and traces
-def main():
-    with obs.timed_task("data_processing", {"source": "example.csv"}) as ctx:
-        # Create or get custom metrics if needed
-        custom_metrics = obs.create_data_processing_metrics("custom")
-        
-        # Load data
-        df = pd.read_csv("example.csv")
-        logger.info(f"Loaded data with {len(df)} rows")
-        
-        # Record metrics
-        custom_metrics["rows_processed"].add(len(df))
-        
-        # Process data with automatic tracing
-        result = process_data(df)
-        
-        # Record more metrics
-        custom_metrics["batch_size"].record(len(result))
-        
-        logger.info(f"Processing complete, {len(result)} rows after processing")
-
-if __name__ == "__main__":
-    try:
-        main()
-    finally:
-        # Clean shutdown (also happens automatically with atexit)
-        obs.shutdown()
+    # Les métriques, logs et traces sont automatiquement collectés
+    result = df.groupby('category').sum()
+    return result
 ```
 
-## Visualizing Metrics with Prometheus and Grafana
+## Fonctionnalités
 
-This library automatically exposes metrics in Prometheus format. To visualize them:
+La bibliothèque va automatiquement :
 
-1. Configure Prometheus to scrape your application
-2. Add dashboards in Grafana that query your metrics
+- **Tracer toutes les fonctions** sans décorateurs supplémentaires
+- **Collecter les métriques système** (CPU, mémoire, GC)
+- **Structurer les logs** avec contexte de trace
+- **Instrumenter les bibliothèques de data science** (Pandas, NumPy, etc.)
+- **Exporter les données** vers Prometheus, OpenTelemetry Collector, ou la console
 
-Example Prometheus configuration:
+## Configuration
 
-```yaml
-scrape_configs:
-  - job_name: 'data-pipeline'
-    static_configs:
-      - targets: ['localhost:8000']
-```
-
-## Distributed Tracing
-
-For distributed tracing across multiple services:
-
-1. Configure `otlp_endpoint` in the `ObservabilityClient`
-2. Use a collector like OpenTelemetry Collector, Jaeger, or Zipkin
-3. Visualize traces in your tracing backend
-
-## Advanced Configuration
+Par défaut, auto_instrument() détecte l'environnement et configure tout automatiquement. Pour personnaliser :
 
 ```python
-# Full configuration example
-obs = ObservabilityClient(
-    service_name="data-pipeline",
+auto_instrument(
+    service_name="mon-service",
     service_version="1.0.0",
-    environment="production",
-    prometheus_port=9090,
-    log_level=logging.INFO,
-    additional_attributes={
-        "team": "data-science",
-        "component": "feature-engineering"
-    },
-    otlp_endpoint="http://otel-collector:4317",
-    enable_console_export=False
+    environment="production",  # ou "development", "testing", "staging"
+    prometheus_port=8000,      # port pour exposer les métriques
+    otlp_endpoint="http://otel-collector:4317",  # pour envoyer les données à un collecteur
+    json_logs=True,            # format JSON pour les logs en production
+    enable_console_export=True # exporter vers la console en développement
 )
 ```
 
-## Environment Variables
+Ou via variables d'environnement :
 
-The library also supports configuration via environment variables:
+```bash
+export SERVICE_NAME="mon-service"
+export SERVICE_VERSION="1.0.0"
+export ENVIRONMENT="production"
+export PROMETHEUS_PORT="8000"
+export OTLP_ENDPOINT="http://otel-collector:4317"
+export LOG_LEVEL="INFO"
+export JSON_LOGS="true"
+```
 
-- `SERVICE_VERSION`: Version of your service
-- `ENVIRONMENT`: Deployment environment (dev, staging, prod)
-- `PROMETHEUS_PORT`: Port for Prometheus metrics
-- `LOG_LEVEL`: Logging level
-- `OTLP_ENDPOINT`: Endpoint for OTLP exporter
+## Avantages 
 
-## License
+1. **Simplicité maximale** : Une seule ligne pour activer toute l'observabilité
+2. **Standardisation** : Toutes les applications suivent les mêmes pratiques
+3. **Productivité** : Réduction du temps de développement consacré à l'observabilité
+4. **Facilité de maintenance** : Centralisation des standards
+5. **Visibilité améliorée** : Dashboards et alertes cohérents
 
-MIT 
+## Exemple Complet
+
+```python
+import pandas as pd
+from simple_observability import auto_instrument
+
+# Activer l'auto-instrumentation
+auto_instrument(service_name="data-pipeline")
+
+def load_data():
+    # Les métriques, logs et traces sont automatiquement collectés
+    df = pd.read_csv("data.csv")
+    return df
+
+def transform_data(df):
+    # Les performances et métriques sont automatiquement mesurés
+    df['total'] = df['value1'] + df['value2']
+    return df
+
+def save_data(df):
+    # Les erreurs sont automatiquement détectées et tracées
+    df.to_csv("output.csv")
+
+def main():
+    try:
+        # Chaque étape est automatiquement tracée
+        df = load_data()
+        df_transformed = transform_data(df)
+        save_data(df_transformed)
+    except Exception as e:
+        # Les erreurs sont automatiquement loggées avec contexte
+        raise
+
+if __name__ == "__main__":
+    main()
+```
+
+## Architecture
+
+La bibliothèque utilise OpenTelemetry comme fondation pour générer et exporter les signaux d'observabilité.
+Elle ajoute une couche d'auto-instrumentation qui analyse votre code et y injecte des traces, 
+métriques et logs de manière transparente, sans nécessiter de modifications de votre code existant. 

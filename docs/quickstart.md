@@ -1,6 +1,6 @@
 # Guide de Démarrage Rapide
 
-Ce guide vous montre comment intégrer `simple_observability` dans votre application Python de traitement de données.
+Ce guide vous montre comment intégrer `simple_observability` dans votre application Python avec une seule ligne de code.
 
 ## Installation
 
@@ -114,6 +114,7 @@ La bibliothèque supporte la configuration via variables d'environnement :
 
 ```bash
 # Configuration de base
+export SERVICE_NAME="mon-service"
 export SERVICE_VERSION="1.0.0"
 export ENVIRONMENT="production"
 

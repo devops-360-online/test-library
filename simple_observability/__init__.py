@@ -2,11 +2,11 @@
 Simple Observability Library for Data Scripts
 ---------------------------------------------
 
-This library provides a simple way to add metrics, logs, and traces to data scripts
-using OpenTelemetry standards.
+This library provides automatic instrumentation for metrics, logs, and traces
+in data applications with just a single line of code.
 """
 
-from .observability import ObservabilityClient
+from .simple_observability import auto_instrument
 
-__all__ = ["ObservabilityClient"]
+__all__ = ["auto_instrument"]
 __version__ = "0.1.0" 

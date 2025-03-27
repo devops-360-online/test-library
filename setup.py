@@ -1,12 +1,12 @@
 from setuptools import setup, find_packages
 
-with open('requirements.txt') as f:
+with open('simple_observability/requirements.txt') as f:
     requirements = f.read().splitlines()
 
 setup(
     name="simple_observability",
     version="0.1.0",
-    description="Simple observability library for data scripts using OpenTelemetry",
+    description="Auto-instrumentation library for metrics, logs and traces with a single line of code",
     author="Your Organization",
     author_email="your.email@example.com",
     packages=find_packages(),

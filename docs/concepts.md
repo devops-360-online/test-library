@@ -1,140 +1,156 @@
-# Concepts Fondamentaux
+# Concepts fondamentaux
 
-Ce document explique les concepts essentiels d'observabilité implémentés dans notre bibliothèque `simple_observability`.
+Cette documentation présente les concepts clés de l'observabilité et comment ils sont implémentés dans la bibliothèque `simple_observability`.
 
-## Les Trois Piliers de l'Observabilité
+## Auto-instrumentation
 
-L'observabilité moderne repose sur trois piliers complémentaires :
+L'auto-instrumentation est la fonctionnalité centrale de `simple_observability`. Elle permet d'instrumenter automatiquement votre code sans avoir à modifier votre code métier existant.
 
-### 1. Métriques
+### Comment fonctionne l'auto-instrumentation
 
-Les **métriques** sont des valeurs numériques collectées à intervalles réguliers, représentant l'état du système à un moment donné.
+Lorsque vous appelez `auto_instrument()`, la bibliothèque:
 
-**Types de métriques implémentés :**
-- **Compteurs** : Des valeurs monotones croissantes (ex: nombre de lignes traitées)
-- **Jauges** : Des valeurs qui peuvent augmenter ou diminuer (ex: utilisation mémoire)
-- **Histogrammes** : Distribution des valeurs mesurées (ex: temps de traitement)
+1. **Modifie le mécanisme d'import de Python** pour intercepter les imports de modules
+2. **Instrumente automatiquement les fonctions** en les décorant avec un tracer
+3. **Configure les exportateurs** pour les métriques, logs et traces
+4. **Intègre les bibliothèques de data science** comme Pandas pour capturer des métriques spécifiques
+5. **Collecte automatiquement les métriques système** comme l'utilisation CPU et mémoire
 
-**Standards imposés par notre bibliothèque :**
-- Noms de métriques en snake_case (`data_rows_processed_total`)
-- Suffixes standardisés (`_total`, `_seconds`, `_bytes`)
-- Unités cohérentes (`s` pour secondes, `By` pour bytes, etc.)
-- Attributs standards inclus (service, environnement, etc.)
+Cette approche permet d'ajouter une observabilité complète à votre application avec une seule ligne de code, sans compromettre la lisibilité ou la maintenabilité de votre code métier.
 
-### 2. Logs
+## Les trois piliers de l'observabilité 
 
-Les **logs** sont des enregistrements textuels d'événements qui se produisent dans le système.
+### Métriques
 
-**Caractéristiques implémentées :**
-- **Logs structurés** : Format JSON en production
-- **Contexte de trace** : Inclusion automatique des identifiants de trace
-- **Niveaux standardisés** : DEBUG, INFO, WARNING, ERROR, CRITICAL
-- **Attributs de contexte** : Possibilité d'ajouter des informations structurées
+Les métriques sont des valeurs numériques collectées à intervalles réguliers pour mesurer les performances et l'état de votre application.
 
-**Standards imposés :**
-- Format cohérent avec informations de base toujours incluses
-- Propagation automatique du contexte de traçage
-- Ajout facile de métadonnées structurées
+#### Types de métriques
 
-### 3. Traces
+- **Compteurs**: Valeurs qui ne peuvent qu'augmenter (ex: nombre de requêtes)
+- **Histogrammes**: Distribution de valeurs (ex: temps de réponse)
+- **Jauges**: Valeurs qui peuvent augmenter ou diminuer (ex: utilisation mémoire)
 
-Les **traces** capturent le flux d'exécution d'une requête ou opération à travers le système.
+#### Métriques collectées automatiquement
 
-**Concepts clés implémentés :**
-- **Spans** : Opérations individuelles au sein d'une trace
-- **Contexte de trace** : Identifiants partagés entre composants
-- **Attributs** : Métadonnées attachées aux spans
-- **Évènements** : Points d'intérêt dans une span
+- **Métriques système**: CPU, mémoire, garbage collector
+- **Métriques d'exécution**: Durée des appels de fonctions, nombre d'appels
+- **Métriques de données**: Pour les DataFrames pandas: nombre de lignes, taille mémoire
 
-**Standards imposés :**
-- Nommage cohérent des spans (`data.load`, `data.transform`)
-- Attributs standards pour les opérations de données
-- Détection automatique de la taille des DataFrames
-- Propagation du contexte entre logs et traces
+#### Standards de nommage
 
-## Standards d'Intégration
+- `service.{métrique}`: Métriques liées au service
+- `system.{ressource}.{métrique}`: Métriques système
+- `function.{métrique}`: Métriques de fonction
+- `data.{métrique}`: Métriques liées aux données
 
-Notre bibliothèque implémente des standards d'intégration pour assurer la cohérence :
+### Logs
+
+Les logs sont des enregistrements textuels d'événements qui se produisent dans votre application.
+
+#### Caractéristiques des logs
+
+- **Structurés**: Format JSON avec champs standardisés
+- **Contexte de trace**: Inclusion des IDs de trace et span
+- **Niveaux standardisés**: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+#### Standards de formatage
+
+- Timestamp au format ISO 8601
+- Inclut service, composant, niveau, message
+- Métadonnées structurées pour faciliter la recherche
+
+### Traces
+
+Les traces capturent le flux d'exécution des requêtes à travers votre application, permettant de comprendre le chemin d'exécution et d'identifier les goulots d'étranglement.
+
+#### Éléments des traces
+
+- **Spans**: Unités de travail individuelles
+- **Contexte de trace**: Propagé à travers les appels de fonction
+- **Attributs**: Métadonnées attachées aux spans
+- **Événements**: Points d'intérêt dans une span
+
+#### Standards de nommage des spans
+
+- `{module}.{fonction}`: Nom automatique pour les fonctions
+- `pandas.{opération}`: Pour les opérations Pandas
+- `data.{opération}`: Pour les opérations de données génériques
+
+## Intégration avec les standards
 
 ### OpenTelemetry
 
-[OpenTelemetry](https://opentelemetry.io/) est la base technologique de notre solution, offrant:
-- Un format standard pour les métriques, logs et traces
-- Des exporters vers différentes destinations
-- Une propagation de contexte entre services
+La bibliothèque utilise OpenTelemetry comme fondation technologique, fournissant:
+
+- Un format standard pour les signaux d'observabilité
+- Une API cohérente entre différents langages
+- Une extensibilité via des exportateurs pluggables
 
 ### Prometheus
 
-[Prometheus](https://prometheus.io/) est utilisé pour le stockage et l'interrogation des métriques:
+Pour les métriques, la bibliothèque s'intègre avec Prometheus:
+
 - Exposition des métriques sur un endpoint HTTP
-- Format de métriques compatible
-- Capacités de scraping pour la collecte
+- Support pour le scraping par Prometheus
+- Compatibilité avec Grafana pour la visualisation
 
-### Standards de Nommage
+## Architecture d'observabilité
 
-Notre bibliothèque définit des standards de nommage clairs:
-
-```
-<domaine>_<entité>_<action>_<unité>[_total]
-```
-
-Exemples:
-- `http_requests_duration_seconds`
-- `data_rows_processed_total`
-- `memory_usage_bytes`
-
-### Standards d'Attributs
-
-Les attributs (ou labels) sont standardisés:
-- `service.name`: Nom du service
-- `service.version`: Version du service
-- `deployment.environment`: Environnement (prod, dev, etc.)
-- `data.source`: Source de données
-- `data.operation`: Type d'opération sur les données
-
-## Architecture d'Observabilité
-
-Notre bibliothèque s'intègre dans une architecture d'observabilité moderne:
+Voici comment `simple_observability` s'intègre dans une architecture d'observabilité moderne:
 
 ```
-Application (avec simple_observability)
-    ↓
-OpenTelemetry Collector (optionnel)
-    ↓
-┌─────────────┬─────────────┬─────────────┐
-│ Prometheus  │ Elastic/    │ Jaeger/     │
-│ (Métriques) │ Loki (Logs) │ Tempo       │
-└─────────────┴─────────────┴─────────────┘
-                    ↓
-                 Grafana
-               (Visualisation)
+  Votre Application                   Infrastructure d'Observabilité
+┌─────────────────────┐             ┌───────────────────────────────┐
+│                     │             │                               │
+│  Code métier        │             │                               │
+│  + auto_instrument()│───Traces────▶  OpenTelemetry Collector      │
+│                     │             │                               │
+│                     │───Logs─────▶│                ┌─────────────┐│
+│                     │             │                │             ││
+│                     │             │                │  Jaeger     ││
+│                     │             │                │  (Traces)   ││
+│                     │             │                │             ││
+│                     │───Métriques─▶─────┐          └─────────────┘│
+│                     │             │     │                         │
+└─────────────────────┘             │     ▼          ┌─────────────┐│
+                                    │  ┌─────────┐   │             ││
+                                    │  │         │   │  Elastic    ││
+                                    │  │Prometheus│──▶  (Logs)     ││
+                                    │  │         │   │             ││
+                                    │  └─────────┘   └─────────────┘│
+                                    │       │                       │
+                                    │       │        ┌─────────────┐│
+                                    │       │        │             ││
+                                    │       └────────▶  Grafana    ││
+                                    │                │ (Dashboards)││
+                                    │                │             ││
+                                    │                └─────────────┘│
+                                    └───────────────────────────────┘
 ```
 
-## Concepts Avancés
+## Concepts avancés
 
-### Auto-instrumentation
+### Auto-instrumentation profonde
 
-Notre bibliothèque offre une **auto-instrumentation** qui:
-- Injecte automatiquement des métriques, logs et traces pertinents
-- Détecte la forme des données traitées
-- Standardise les noms et attributs
-- Adapte le comportement à l'environnement
+La bibliothèque ne se contente pas d'instrumenter les fonctions de votre code, elle analyse également leur signature, arguments et valeurs de retour pour enrichir automatiquement les traces avec des métadonnées pertinentes.
 
-### Corrélation des Signaux
+### Corrélation de signaux
 
-La corrélation entre métriques, logs et traces est automatique:
-- IDs de trace inclus dans les logs
-- Métriques liées aux opérations tracées
-- Timestamps alignés entre les différents signaux
+Les trois piliers (métriques, logs, traces) sont automatiquement corrélés:
 
-### Instrumentation Contextuelle
+- Les logs incluent les IDs de trace et span
+- Les métriques et traces partagent des attributs communs
+- Un événement peut être suivi à travers les trois piliers
 
-Les contextes permettent d'enrichir automatiquement tous les signaux:
-- `timed_task` pour instrumenter une tâche complète
-- `data_operation` pour les opérations spécifiques aux données
-- `with_data` pour enrichir les logs avec des métadonnées
+### Instrumentation contextuelle
 
-## Ressources externes
+L'instrumentation adapte automatiquement son comportement selon:
+
+- Le type de fonction (traitement de données, IO, etc.)
+- L'environnement d'exécution (dev, test, prod)
+- Les bibliothèques utilisées (pandas, numpy, etc.)
+
+### Ressources externes
 
 - [Documentation OpenTelemetry](https://opentelemetry.io/docs/)
 - [Documentation Prometheus](https://prometheus.io/docs/introduction/overview/)
