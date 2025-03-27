@@ -1,10 +1,10 @@
 # Concepts fondamentaux
 
-Cette documentation présente les concepts clés de l'observabilité et comment ils sont implémentés dans la bibliothèque `simple_observability`.
+Cette documentation présente les concepts clés de l'observabilité et comment ils sont implémentés dans la bibliothèque `autotelemetry`.
 
 ## Auto-instrumentation
 
-L'auto-instrumentation est la fonctionnalité centrale de `simple_observability`. Elle permet d'instrumenter automatiquement votre code sans avoir à modifier votre code métier existant.
+L'auto-instrumentation est la fonctionnalité centrale de `autotelemetry`. Elle permet d'instrumenter automatiquement votre code sans avoir à modifier votre code métier existant.
 
 ### Comment fonctionne l'auto-instrumentation
 
@@ -12,7 +12,7 @@ Lorsque vous appelez `auto_instrument()`, la bibliothèque:
 
 1. **Modifie le mécanisme d'import de Python** pour intercepter les imports de modules
 2. **Instrumente automatiquement les fonctions** en les décorant avec un tracer
-3. **Configure les exportateurs** pour les métriques, logs et traces
+3. **Configure les exportateurs** pour les métriques, logs (JSON) et traces
 4. **Intègre les bibliothèques de data science** comme Pandas pour capturer des métriques spécifiques
 5. **Collecte automatiquement les métriques système** comme l'utilisation CPU et mémoire
 
@@ -47,17 +47,55 @@ Les métriques sont des valeurs numériques collectées à intervalles régulier
 
 Les logs sont des enregistrements textuels d'événements qui se produisent dans votre application.
 
+#### La normalisation JSON obligatoire
+
+Notre bibliothèque **impose le format JSON** pour tous les logs, garantissant une structure cohérente et exploitable à l'échelle de toute l'organisation.
+
+Avantages de cette normalisation:
+- **Facilité d'analyse**: Les logs structurés permettent des requêtes complexes
+- **Efficacité opérationnelle**: Moins de temps perdu à parser des formats incohérents
+- **Intégration simplifiée**: Compatible avec les outils modernes d'analyse de logs
+- **Contexte enrichi**: Chaque log contient automatiquement des métadonnées standardisées
+
 #### Caractéristiques des logs
 
-- **Structurés**: Format JSON avec champs standardisés
+- **JSON obligatoire**: Format structuré avec champs standardisés
 - **Contexte de trace**: Inclusion des IDs de trace et span
 - **Niveaux standardisés**: DEBUG, INFO, WARNING, ERROR, CRITICAL
+- **Attributs obligatoires**: service.name, timestamp, level, etc.
 
 #### Standards de formatage
 
 - Timestamp au format ISO 8601
 - Inclut service, composant, niveau, message
 - Métadonnées structurées pour faciliter la recherche
+- Schéma JSON validé
+
+#### Exemple de log JSON standardisé
+
+```json
+{
+  "timestamp": "2023-06-15T14:32:45.123Z",
+  "level": "ERROR",
+  "logger": "data_pipeline",
+  "message": "Échec du traitement",
+  "service.name": "mon-service",
+  "service.version": "1.0.0",
+  "deployment.environment": "production",
+  "trace_id": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6",
+  "span_id": "b2c3d4e5f6g7h8i9",
+  "exception": {
+    "type": "ValueError",
+    "message": "Données invalides",
+    "traceback": "..."
+  },
+  "data": {
+    "job_id": "12345",
+    "input_rows": 1000,
+    "stage": "transform"
+  }
+}
+```
 
 ### Traces
 
@@ -94,9 +132,17 @@ Pour les métriques, la bibliothèque s'intègre avec Prometheus:
 - Support pour le scraping par Prometheus
 - Compatibilité avec Grafana pour la visualisation
 
+### Elasticsearch
+
+Pour les logs JSON standardisés, la bibliothèque s'intègre parfaitement avec Elasticsearch:
+
+- Format JSON natif compatible avec Elasticsearch
+- Indexation efficace sans transformation nécessaire
+- Facilite les requêtes structurées et l'analyse
+
 ## Architecture d'observabilité
 
-Voici comment `simple_observability` s'intègre dans une architecture d'observabilité moderne:
+Voici comment `autotelemetry` s'intègre dans une architecture d'observabilité moderne:
 
 ```
   Votre Application                   Infrastructure d'Observabilité
@@ -105,7 +151,7 @@ Voici comment `simple_observability` s'intègre dans une architecture d'observab
 │  Code métier        │             │                               │
 │  + auto_instrument()│───Traces────▶  OpenTelemetry Collector      │
 │                     │             │                               │
-│                     │───Logs─────▶│                ┌─────────────┐│
+│                     │───Logs JSON─▶│                ┌─────────────┐│
 │                     │             │                │             ││
 │                     │             │                │  Jaeger     ││
 │                     │             │                │  (Traces)   ││
@@ -114,8 +160,8 @@ Voici comment `simple_observability` s'intègre dans une architecture d'observab
 │                     │             │     │                         │
 └─────────────────────┘             │     ▼          ┌─────────────┐│
                                     │  ┌─────────┐   │             ││
-                                    │  │         │   │  Elastic    ││
-                                    │  │Prometheus│──▶  (Logs)     ││
+                                    │  │         │   │Elasticsearch││
+                                    │  │Prometheus│   │  (Logs)     ││
                                     │  │         │   │             ││
                                     │  └─────────┘   └─────────────┘│
                                     │       │                       │
@@ -138,7 +184,7 @@ La bibliothèque ne se contente pas d'instrumenter les fonctions de votre code, 
 
 Les trois piliers (métriques, logs, traces) sont automatiquement corrélés:
 
-- Les logs incluent les IDs de trace et span
+- Les logs JSON incluent toujours les IDs de trace et span
 - Les métriques et traces partagent des attributs communs
 - Un événement peut être suivi à travers les trois piliers
 
@@ -154,4 +200,5 @@ L'instrumentation adapte automatiquement son comportement selon:
 
 - [Documentation OpenTelemetry](https://opentelemetry.io/docs/)
 - [Documentation Prometheus](https://prometheus.io/docs/introduction/overview/)
-- [Documentation Grafana](https://grafana.com/docs/) 
+- [Documentation Grafana](https://grafana.com/docs/)
+- [Documentation Elasticsearch](https://www.elastic.co/guide/index.html) 

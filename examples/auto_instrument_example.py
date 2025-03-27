@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Exemple d'utilisation de l'auto-instrumentation avec simple_observability.
+Exemple d'utilisation de l'auto-instrumentation avec autotelemetry.
 
 Cet exemple montre comment une seule ligne de code active automatiquement
 toutes les fonctionnalités d'observabilité dans une application de traitement de données.
@@ -11,12 +11,12 @@ import numpy as np
 from datetime import datetime
 
 # Une seule ligne pour activer toute l'observabilité
-from simple_observability import auto_instrument
+from autotelemetry import auto_instrument
 auto_instrument(service_name="demo-auto-instrument")
 
 def generate_data(rows=100):
     """Génère des données de test."""
-    # Automatiquement tracé
+    # Automatiquement tracé avec des logs JSON
     data = {
         'id': list(range(1, rows + 1)),
         'valeur': np.random.rand(rows) * 100,
@@ -27,7 +27,7 @@ def generate_data(rows=100):
 
 def process_data(df):
     """Traite les données."""
-    # Automatiquement tracé avec métriques
+    # Automatiquement tracé avec métriques et logs JSON
     original_len = len(df)
     
     # Filtrer valeurs > 50
@@ -43,6 +43,7 @@ def process_data(df):
 def main():
     """Fonction principale."""
     # Auto-instrumenté - toutes les étapes sont tracées
+    # et les logs sont automatiquement générés en format JSON
     try:
         print("Génération des données...")
         df = generate_data(rows=1000)
@@ -57,7 +58,7 @@ def main():
         print(stats)
         
     except Exception as e:
-        # Automatiquement loggé avec contexte de trace
+        # Automatiquement loggé avec contexte de trace en JSON
         print(f"Erreur : {str(e)}")
         raise
 

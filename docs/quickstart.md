@@ -1,112 +1,151 @@
-# Guide de Démarrage Rapide
+# Guide de démarrage rapide
 
-Ce guide vous montre comment intégrer `simple_observability` dans votre application Python avec une seule ligne de code.
+Ce guide vous permettra de démarrer rapidement avec AutoTelemetry.
 
 ## Installation
 
-Installez la bibliothèque via pip :
-
 ```bash
-pip install simple_observability
+pip install autotelemetry
 ```
 
 ## Utilisation basique
 
-### Auto-instrumentation
-
 ```python
-# Une seule ligne pour activer toute l'observabilité
-from simple_observability import auto_instrument
-auto_instrument(service_name="mon-service")
+from autotelemetry import auto_instrument, LogLevel, Environment
 
-# Votre code existant est automatiquement instrumenté
-def process_data(df):
-    # Les métriques, logs et traces sont automatiquement collectés
-    result = df.groupby('category').sum()
-    return result
+# Une seule ligne active l'observabilité complète
+client = auto_instrument(
+    service_name="mon-application",
+    environment=Environment.PRODUCTION  # Les logs JSON sont obligatoires en production
+)
+
+# Le code après cette ligne est automatiquement instrumenté
 ```
 
-### Configuration avancée (optionnelle)
+## Configuration recommandée
 
-Si vous souhaitez personnaliser le comportement de l'auto-instrumentation :
+Pour une configuration optimale, nous recommandons:
 
 ```python
-auto_instrument(
-    service_name="mon-service",
+from autotelemetry import auto_instrument, LogLevel, Environment
+
+# Configuration complète
+client = auto_instrument(
+    service_name="mon-application",
     service_version="1.0.0",
-    environment="production",  # ou "development", "testing", "staging"
-    prometheus_port=8000,      # port pour exposer les métriques
-    otlp_endpoint="http://otel-collector:4317",  # pour envoyer les données à un collecteur
-    json_logs=True,            # format JSON pour les logs en production
-    enable_console_export=True # exporter vers la console en développement
+    environment=Environment.PRODUCTION,  # Les logs JSON sont obligatoires en production
+    log_level=LogLevel.INFO,
+    additional_attributes={
+        "team": "data-science",
+        "domain": "recommandation"
+    },
+    prometheus_port=8000,
+    otlp_endpoint="localhost:4317"  # Pour envoyer à un collecteur OpenTelemetry
 )
 ```
 
-### Fonctionnalités automatiques
-
-L'auto-instrumentation va automatiquement :
-
-1. **Tracer toutes les fonctions** :
-   - Création de spans pour chaque appel de fonction
-   - Mesure des durées d'exécution
-   - Propagation du contexte entre les appels
-
-2. **Collecter les métriques** :
-   - Métriques système (CPU, mémoire, etc.)
-   - Métriques applicatives (nombre d'appels, durées, etc.)
-   - Métriques de traitement de données (lignes traitées, erreurs, etc.)
-
-3. **Logger les informations** :
-   - Logs structurés en JSON
-   - Contexte de trace inclus
-   - Niveaux de log appropriés
-
-4. **Mesurer les performances** :
-   - Temps d'exécution des fonctions
-   - Utilisation des ressources
-   - Points chauds de performance
-
-5. **Détecter les anomalies** :
-   - Erreurs et exceptions
-   - Performances anormales
-   - Utilisation excessive des ressources
-
-### Exemple complet
+## Utilisation des loggers
 
 ```python
-import pandas as pd
-from simple_observability import auto_instrument
+# Obtenir un logger configuré
+logger = client.get_logger()
 
-# Activer l'auto-instrumentation
-auto_instrument(service_name="data-pipeline")
+# Log simple
+logger.info("Traitement démarré")
 
-def load_data():
-    # Les métriques, logs et traces sont automatiquement collectés
-    df = pd.read_csv("data.csv")
-    return df
+# Log avec données structurées (disponible en JSON)
+logger.info("Traitement terminé", data={
+    "durée_ms": 350,
+    "elements_traités": 1250,
+    "erreurs": 0
+})
 
-def transform_data(df):
-    # Les performances et métriques sont automatiquement mesurés
-    df['total'] = df['value1'] + df['value2']
-    return df
-
-def save_data(df):
-    # Les erreurs sont automatiquement détectées et tracées
-    df.to_csv("output.csv")
-
-def main():
-    try:
-        # Chaque étape est automatiquement tracée
-        df = load_data()
-        df_transformed = transform_data(df)
-        save_data(df_transformed)
-    except Exception as e:
-        # Les erreurs sont automatiquement loggées avec contexte
-        raise
-
-if __name__ == "__main__":
-    main()
+# Log avec contexte temporaire
+with logger.with_data(request_id="abc-123", utilisateur="user@example.com"):
+    logger.info("Traitement de la requête")
+    # Ces logs incluront automatiquement request_id et utilisateur
+    logger.info("Étape intermédiaire")
 ```
+
+## Créer des métriques personnalisées
+
+```python
+# Compteur
+requetes_counter = client.create_counter(
+    name="app.requetes.total",
+    description="Nombre total de requêtes traitées",
+    unit="1"
+)
+
+# Utilisation du compteur
+requetes_counter.add(1, {"endpoint": "/api/data", "status": "success"})
+
+# Histogramme pour la latence
+latence_histogram = client.create_histogram(
+    name="app.requetes.latence",
+    description="Distribution des temps de réponse",
+    unit="ms"
+)
+
+# Utilisation de l'histogramme
+latence_histogram.record(42.5, {"endpoint": "/api/data"})
+```
+
+## Tracer des fonctions manuellement
+
+L'auto-instrumentation trace la plupart des fonctions, mais vous pouvez également tracer manuellement:
+
+```python
+# Obtenir un tracer depuis le client
+tracer = client.tracer
+
+# Tracer un bloc de code
+with tracer.start_as_current_span("opération.importante") as span:
+    # Ajouter des attributs à la span
+    span.set_attribute("priorité", "haute")
+    
+    # Exécuter l'opération
+    résultat = effectuer_operation_importante()
+    
+    # Ajouter des informations sur le résultat
+    span.set_attribute("taille_résultat", len(résultat))
+```
+
+## Fermeture propre
+
+La bibliothèque enregistre un hook d'arrêt automatique, mais vous pouvez également fermer explicitement:
+
+```python
+# À la fin de votre programme
+client.shutdown()
+```
+
+## Format JSON des logs
+
+En production (environnement `Environment.PRODUCTION`), les logs JSON sont **obligatoires** et suivent cette structure:
+
+```json
+{
+  "timestamp": "2023-09-10T15:42:10.123Z",
+  "level": "INFO",
+  "logger": "mon_module",
+  "message": "Traitement terminé",
+  "module": "mon_module",
+  "function": "traiter_donnees",
+  "line": 42,
+  "service.name": "mon-application",
+  "service.version": "1.0.0",
+  "deployment.environment": "production",
+  "trace_id": "abcdef1234567890abcdef1234567890",
+  "span_id": "abcdef1234567890",
+  "data": {
+    "durée_ms": 350,
+    "elements_traités": 1250
+  }
+}
+```
+
+Cette structure standardisée permet une analyse efficace dans des outils comme Elasticsearch ou Loki.
 
 ## Configuration via variables d'environnement
 
@@ -124,7 +163,32 @@ export OTLP_ENDPOINT="http://collector:4317"
 
 # Options de logging
 export LOG_LEVEL="INFO"
-export JSON_LOGS="true"
+export JSON_LOGS="true" # Toujours true en production
+```
+
+## Intégration avec Elasticsearch pour les logs JSON
+
+Comme tous les logs sont en format JSON standardisé, ils s'intègrent parfaitement avec Elasticsearch :
+
+```yaml
+# logstash.conf
+input {
+  http {
+    port => 8080
+    codec => json
+  }
+}
+
+filter {
+  # Pas besoin de filtres complexes car les logs sont déjà structurés
+}
+
+output {
+  elasticsearch {
+    hosts => ["elasticsearch:9200"]
+    index => "logs-%{+YYYY.MM.dd}"
+  }
+}
 ```
 
 ## Intégration avec Prometheus et Grafana
