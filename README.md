@@ -18,9 +18,9 @@ L'observabilité moderne repose sur trois piliers fondamentaux : les métriques,
 
 `simple_observability` est une bibliothèque d'auto-instrumentation qui :
 
-- **Unifie les trois piliers** sous une API simple et cohérente
+- **Auto-instrumente** automatiquement votre code avec une seule ligne
 - **Standardise** les noms, formats et attributs à l'échelle de l'organisation
-- **Réduit le code d'initialisation** de plus de 100 lignes à moins de 10
+- **Réduit le code d'initialisation** à une seule ligne
 - **Adapte automatiquement** son comportement selon l'environnement (dev, test, prod)
 - **Spécialise les abstractions** pour les opérations de traitement de données
 
@@ -29,31 +29,31 @@ L'observabilité moderne repose sur trois piliers fondamentaux : les métriques,
 Notre bibliothèque permet une auto-instrumentation avec un minimum d'effort :
 
 ```python
-# Une seule ligne pour initialiser toute l'observabilité
-from simple_observability import ObservabilityClient
-obs = ObservabilityClient(service_name="mon-service")
+# Une seule ligne pour activer toute l'observabilité
+from simple_observability import auto_instrument
+auto_instrument(service_name="mon-service")
 
-# Obtenir un logger pré-configuré
-logger = obs.get_logger()
-
-# Instrumenter automatiquement une fonction de traitement de données
-@obs.trace_data_processing()
-def process_dataframe(df):
-    logger.info(f"Traitement de {len(df)} lignes")
-    # ... logique de traitement ...
+# Votre code existant est automatiquement instrumenté
+def process_data(df):
+    # Les métriques, logs et traces sont automatiquement collectés
+    result = df.groupby('category').sum()
     return result
-
-# Créer des métriques standard en une ligne
-metrics = obs.create_data_processing_metrics()
 ```
+
+La bibliothèque va automatiquement :
+- Tracer toutes les fonctions
+- Collecter les métriques système et applicatives
+- Logger les informations pertinentes
+- Mesurer les performances
+- Détecter les anomalies
 
 ## Avantages pour les équipes
 
-1. **Standardisation** : Toutes les applications suivent les mêmes pratiques d'observabilité
-2. **Productivité** : Réduction du temps de développement consacré à l'observabilité
-3. **Facilité de maintenance** : Centralisation des standards et mises à jour
-4. **Visibilité améliorée** : Dashboards et alertes cohérents grâce aux standards
-5. **Formation simplifiée** : Les développeurs peuvent instrumenter sans être experts en observabilité
+1. **Simplicité maximale** : Une seule ligne pour activer toute l'observabilité
+2. **Standardisation** : Toutes les applications suivent les mêmes pratiques d'observabilité
+3. **Productivité** : Réduction du temps de développement consacré à l'observabilité
+4. **Facilité de maintenance** : Centralisation des standards et mises à jour
+5. **Visibilité améliorée** : Dashboards et alertes cohérents grâce aux standards
 
 ## Prérequis
 
