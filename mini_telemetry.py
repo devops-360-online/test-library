@@ -97,6 +97,9 @@ class TelemetryTools:
         # Étape 4: Configuration du logging (avec intégration trace)
         self._setup_logging(log_level, use_json_logs)
         
+        # Initialiser le dictionnaire de contexte
+        self._context_data = {}
+        
         # Afficher un message d'initialisation
         self.logger.info(f"TelemetryTools initialisé pour {service_name}")
     
@@ -248,6 +251,53 @@ class TelemetryTools:
         """
         logger_name = name or self.service_name
         return logging.getLogger(logger_name)
+    
+    def set_context_data(self, key: str, value: Any) -> None:
+        """
+        Stocke une valeur dans le contexte de télémétrie.
+        
+        Args:
+            key: Clé du contexte
+            value: Valeur à stocker
+        """
+        self._context_data[key] = value
+    
+    def get_context_data(self, key: str, default: Any = None) -> Any:
+        """
+        Récupère une valeur du contexte de télémétrie.
+        
+        Args:
+            key: Clé du contexte
+            default: Valeur par défaut si la clé n'existe pas
+            
+        Returns:
+            Valeur stockée ou valeur par défaut
+        """
+        return self._context_data.get(key, default)
+    
+    def clear_context_data(self) -> None:
+        """
+        Efface toutes les données de contexte.
+        """
+        self._context_data.clear()
+    
+    def update_context_data(self, context_dict: Dict[str, Any]) -> None:
+        """
+        Ajoute ou met à jour plusieurs valeurs dans le contexte de télémétrie.
+        
+        Args:
+            context_dict: Dictionnaire de paires clé-valeur à ajouter au contexte
+        """
+        # Utiliser le span courant si disponible, sinon juste stocker les données
+        span = trace.get_current_span()
+        
+        # Mettre à jour le contexte interne
+        self._context_data.update(context_dict)
+        
+        # Si nous avons un span actif, ajouter aussi comme attributs
+        if span.get_span_context().is_valid:
+            for key, value in context_dict.items():
+                span.set_attribute(key, value)
 
 
 class TraceContextFormatter(logging.Formatter):
