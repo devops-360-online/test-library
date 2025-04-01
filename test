@@ -1,0 +1,278 @@
+2025-04-01 10:14:08 [INFO] data-pipeline - trace_id=00000000000000000000000000000000 span_id=0000000000000000 - Telemetry initialized for service: data-pipeline
+2025-04-01 10:14:08 [INFO] data-pipeline - trace_id=484ffcfbac04492b17496fb3d49eb7dd span_id=39e5267d64060683 - Starting data processing application
+2025-04-01 10:14:08 [INFO] data-pipeline - trace_id=484ffcfbac04492b17496fb3d49eb7dd span_id=030029f0fae43fff - Starting to process 1000 rows of data
+2025-04-01 10:14:08 [INFO] data-pipeline - trace_id=484ffcfbac04492b17496fb3d49eb7dd span_id=030029f0fae43fff - Processing complete. Mean: 99.32, Std: 15.48
+2025-04-01 10:14:08 [INFO] data-pipeline - trace_id=484ffcfbac04492b17496fb3d49eb7dd span_id=9c9b176af58d3b43 - Starting to save data
+2025-04-01 10:14:08 [INFO] data-pipeline - trace_id=484ffcfbac04492b17496fb3d49eb7dd span_id=9c9b176af58d3b43 - Data saved successfully
+2025-04-01 10:14:08 [INFO] data-pipeline - trace_id=484ffcfbac04492b17496fb3d49eb7dd span_id=39e5267d64060683 - Pipeline completed successfully
+2025-04-01 10:14:08 [INFO] data-pipeline - trace_id=00000000000000000000000000000000 span_id=0000000000000000 - Shutting down data processing application
+{
+    "resource_metrics": [
+        {
+            "resource": {
+                "attributes": {
+                    "telemetry.sdk.language": "python",
+                    "telemetry.sdk.name": "opentelemetry",
+                    "telemetry.sdk.version": "1.31.1",
+                    "service.name": "data-pipeline",
+                    "service.version": "1.0.0",
+                    "deployment.environment": "development"
+                },
+                "schema_url": ""
+            },
+            "scope_metrics": [
+                {
+                    "scope": {
+                        "name": "data-pipeline",
+                        "version": "1.0.0",
+                        "schema_url": "",
+                        "attributes": null
+                    },
+                    "metrics": [
+                        {
+                            "name": "processed_rows_total",
+                            "description": "Total number of rows processed",
+                            "unit": "",
+                            "data": {
+                                "data_points": [
+                                    {
+                                        "attributes": {},
+                                        "start_time_unix_nano": 1743495248334894000,
+                                        "time_unix_nano": 1743495248836062000,
+                                        "value": 1000,
+                                        "exemplars": [
+                                            {
+                                                "filtered_attributes": null,
+                                                "value": 1000,
+                                                "time_unix_nano": 1743495248334872000,
+                                                "span_id": 216218897091936255,
+                                                "trace_id": 96119738255063708453214638382350514141
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "aggregation_temporality": 2,
+                                "is_monotonic": true
+                            }
+                        },
+                        {
+                            "name": "processing_time_seconds",
+                            "description": "Time taken to process data",
+                            "unit": "s",
+                            "data": {
+                                "data_points": [
+                                    {
+                                        "attributes": {},
+                                        "start_time_unix_nano": 1743495248334977000,
+                                        "time_unix_nano": 1743495248836062000,
+                                        "count": 1,
+                                        "sum": 0.001257181167602539,
+                                        "bucket_counts": [
+                                            0,
+                                            1,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0
+                                        ],
+                                        "explicit_bounds": [
+                                            0.0,
+                                            5.0,
+                                            10.0,
+                                            25.0,
+                                            50.0,
+                                            75.0,
+                                            100.0,
+                                            250.0,
+                                            500.0,
+                                            750.0,
+                                            1000.0,
+                                            2500.0,
+                                            5000.0,
+                                            7500.0,
+                                            10000.0
+                                        ],
+                                        "min": 0.001257181167602539,
+                                        "max": 0.001257181167602539,
+                                        "exemplars": [
+                                            {
+                                                "filtered_attributes": null,
+                                                "value": 0.001257181167602539,
+                                                "time_unix_nano": 1743495248334905000,
+                                                "span_id": 216218897091936255,
+                                                "trace_id": 96119738255063708453214638382350514141
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "aggregation_temporality": 2
+                            }
+                        },
+                        {
+                            "name": "save_time_seconds",
+                            "description": "Time taken to process data",
+                            "unit": "s",
+                            "data": {
+                                "data_points": [
+                                    {
+                                        "attributes": {},
+                                        "start_time_unix_nano": 1743495248835667000,
+                                        "time_unix_nano": 1743495248836062000,
+                                        "count": 1,
+                                        "sum": 0.5004768371582031,
+                                        "bucket_counts": [
+                                            0,
+                                            1,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0
+                                        ],
+                                        "explicit_bounds": [
+                                            0.0,
+                                            5.0,
+                                            10.0,
+                                            25.0,
+                                            50.0,
+                                            75.0,
+                                            100.0,
+                                            250.0,
+                                            500.0,
+                                            750.0,
+                                            1000.0,
+                                            2500.0,
+                                            5000.0,
+                                            7500.0,
+                                            10000.0
+                                        ],
+                                        "min": 0.5004768371582031,
+                                        "max": 0.5004768371582031,
+                                        "exemplars": [
+                                            {
+                                                "filtered_attributes": null,
+                                                "value": 0.5004768371582031,
+                                                "time_unix_nano": 1743495248835549000,
+                                                "span_id": 11284639039460555587,
+                                                "trace_id": 96119738255063708453214638382350514141
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "aggregation_temporality": 2
+                            }
+                        }
+                    ],
+                    "schema_url": ""
+                }
+            ],
+            "schema_url": ""
+        }
+    ]
+}
+{
+    "name": "process_data",
+    "context": {
+        "trace_id": "0x484ffcfbac04492b17496fb3d49eb7dd",
+        "span_id": "0x030029f0fae43fff",
+        "trace_state": "[]"
+    },
+    "kind": "SpanKind.INTERNAL",
+    "parent_id": "0x39e5267d64060683",
+    "start_time": "2025-04-01T08:14:08.333616Z",
+    "end_time": "2025-04-01T08:14:08.335022Z",
+    "status": {
+        "status_code": "UNSET"
+    },
+    "attributes": {},
+    "events": [],
+    "links": [],
+    "resource": {
+        "attributes": {
+            "telemetry.sdk.language": "python",
+            "telemetry.sdk.name": "opentelemetry",
+            "telemetry.sdk.version": "1.31.1",
+            "service.name": "data-pipeline",
+            "service.version": "1.0.0",
+            "deployment.environment": "development"
+        },
+        "schema_url": ""
+    }
+}
+{
+    "name": "save_data",
+    "context": {
+        "trace_id": "0x484ffcfbac04492b17496fb3d49eb7dd",
+        "span_id": "0x9c9b176af58d3b43",
+        "trace_state": "[]"
+    },
+    "kind": "SpanKind.INTERNAL",
+    "parent_id": "0x39e5267d64060683",
+    "start_time": "2025-04-01T08:14:08.335044Z",
+    "end_time": "2025-04-01T08:14:08.835848Z",
+    "status": {
+        "status_code": "UNSET"
+    },
+    "attributes": {},
+    "events": [],
+    "links": [],
+    "resource": {
+        "attributes": {
+            "telemetry.sdk.language": "python",
+            "telemetry.sdk.name": "opentelemetry",
+            "telemetry.sdk.version": "1.31.1",
+            "service.name": "data-pipeline",
+            "service.version": "1.0.0",
+            "deployment.environment": "development"
+        },
+        "schema_url": ""
+    }
+}
+{
+    "name": "data_pipeline",
+    "context": {
+        "trace_id": "0x484ffcfbac04492b17496fb3d49eb7dd",
+        "span_id": "0x39e5267d64060683",
+        "trace_state": "[]"
+    },
+    "kind": "SpanKind.INTERNAL",
+    "parent_id": null,
+    "start_time": "2025-04-01T08:14:08.331563Z",
+    "end_time": "2025-04-01T08:14:08.835909Z",
+    "status": {
+        "status_code": "UNSET"
+    },
+    "attributes": {},
+    "events": [],
+    "links": [],
+    "resource": {
+        "attributes": {
+            "telemetry.sdk.language": "python",
+            "telemetry.sdk.name": "opentelemetry",
+            "telemetry.sdk.version": "1.31.1",
+            "service.name": "data-pipeline",
+            "service.version": "1.0.0",
+            "deployment.environment": "development"
+        },
+        "schema_url": ""
+    }
+}

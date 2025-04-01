@@ -1,69 +1,395 @@
 #!/usr/bin/env python3
 """
-Mini-Telemetry - Bibliothèque minimaliste pour OpenTelemetry
-------------------------------------------------------------
+Mini-Telemetry - Simple observability library
+---------------------------------------------
 
-Cette bibliothèque simplifie l'utilisation d'OpenTelemetry en:
-1. Configurant les outils de base (traces, logs, métriques)
-2. Facilitant la corrélation entre ces signaux
-3. Exposant une API simple pour les développeurs
+A lightweight library for application monitoring with:
+1. Tracing - Track operations through your code
+2. Logging - Record events with context
+3. Metrics - Measure performance and behaviors
 
-LES DONNÉES SONT EXPORTÉES UNIQUEMENT VERS STDOUT:
-- Aucun composant externe n'est nécessaire
-- Tout apparaît directement dans la console
-- Parfait pour le développement et le debug
-- Un autre composant séparé peut collecter la sortie standard si nécessaire
-
-Les développeurs sont responsables de l'instrumentation de leur code,
-la bibliothèque ne fait que configurer et exposer les outils.
+Requires no external dependencies and outputs to stdout.
 """
 
+import json
 import logging
 import sys
 import time
-from typing import Dict, Any, Optional, List
-
-# Import des modules OpenTelemetry de base
-# - API: Interfaces publiques pour l'instrumentation
-# - SDK: Implémentation des API pour collecter et exporter les données
-from opentelemetry import trace, metrics
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
-from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import ConsoleMetricExporter, PeriodicExportingMetricReader
-from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION, DEPLOYMENT_ENVIRONMENT
-
-# Import pour l'intégration de contexte de trace dans les logs
-from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
-from opentelemetry.trace import format_trace_id, format_span_id
-import json
+import uuid
+from contextlib import contextmanager
+from datetime import datetime
+from typing import Dict, Any, List, Optional, Callable
 
 
-class TelemetryTools:
-    """
-    Classe centrale qui configure et expose les outils d'observabilité.
+class MiniTrace:
+    """Simple tracing system to track operations through code."""
     
-    Cette classe gère uniquement la configuration des outils OpenTelemetry
-    et expose leurs interfaces pour que les développeurs puissent les utiliser
-    dans leur code.
-    """
+    def __init__(self, name: str):
+        """Initialize tracer with a name."""
+        self.name = name
+        self.current_trace_id = None
+        self.current_span_id = None
+        self.parent_span_id = None
+        self.spans = []
+        self.active_spans = {}
+    
+    def generate_id(self) -> str:
+        """Generate a random ID for traces and spans."""
+        return str(uuid.uuid4())
+    
+    def start_trace(self) -> str:
+        """Start a new trace and return the trace ID."""
+        self.current_trace_id = self.generate_id()
+        return self.current_trace_id
+    
+    def start_span(self, name: str, attributes: Dict[str, Any] = None) -> str:
+        """Start a new span within the current trace."""
+        if not self.current_trace_id:
+            self.start_trace()
+            
+        span_id = self.generate_id()
+        start_time = time.time()
+        
+        # Create span data
+        span = {
+            "trace_id": self.current_trace_id,
+            "span_id": span_id,
+            "parent_span_id": self.current_span_id,  # Could be None for root span
+            "name": name,
+            "start_time": start_time,
+            "attributes": attributes or {},
+            "events": []
+        }
+        
+        # Save parent ID for restoration when span ends
+        old_span_id = self.current_span_id
+        
+        # Set this as current span
+        self.current_span_id = span_id
+        
+        # Store active span with its parent reference
+        self.active_spans[span_id] = {
+            "span": span,
+            "parent_id": old_span_id
+        }
+        
+        return span_id
+    
+    def end_span(self, span_id: Optional[str] = None) -> None:
+        """End the specified span or current span if none provided."""
+        if span_id is None:
+            span_id = self.current_span_id
+            
+        if span_id not in self.active_spans:
+            return
+            
+        # Get the span data
+        span_data = self.active_spans[span_id]["span"]
+        
+        # Set end time
+        span_data["end_time"] = time.time()
+        span_data["duration_ms"] = (span_data["end_time"] - span_data["start_time"]) * 1000
+        
+        # Add to completed spans
+        self.spans.append(span_data)
+        
+        # Restore parent span as current
+        self.current_span_id = self.active_spans[span_id]["parent_id"]
+        
+        # Remove from active spans
+        del self.active_spans[span_id]
+        
+        # If this was the root span, print the trace
+        if not self.current_span_id:
+            self._print_trace()
+            self.current_trace_id = None
+    
+    def add_event(self, name: str, attributes: Dict[str, Any] = None) -> None:
+        """Add an event to the current span."""
+        if not self.current_span_id:
+            return
+            
+        event = {
+            "name": name,
+            "timestamp": time.time(),
+            "attributes": attributes or {}
+        }
+        
+        # Add event to current span
+        self.active_spans[self.current_span_id]["span"]["events"].append(event)
+    
+    def _print_trace(self) -> None:
+        """Print the completed trace to stdout."""
+        trace = {
+            "trace_id": self.current_trace_id,
+            "spans": self.spans
+        }
+        print(f"[TRACE] {json.dumps(trace)}")
+        self.spans = []
+    
+    @contextmanager
+    def span(self, name: str, attributes: Dict[str, Any] = None):
+        """Context manager for spans."""
+        span_id = self.start_span(name, attributes)
+        try:
+            yield span_id
+        finally:
+            self.end_span(span_id)
+
+
+class MiniMetrics:
+    """Simple metrics collection system."""
+    
+    def __init__(self, name: str):
+        """Initialize metrics collector with a name."""
+        self.name = name
+        self.counters = {}
+        self.gauges = {}
+        self.histograms = {}
+        self.last_report_time = time.time()
+        self.report_interval = 10  # Report every 10 seconds by default
+        
+    def counter(self, name: str, value: int = 1, tags: Dict[str, str] = None) -> None:
+        """Increment a counter metric."""
+        key = self._get_key(name, tags)
+        if key not in self.counters:
+            self.counters[key] = {
+                "name": name,
+                "value": 0,
+                "tags": tags or {}
+            }
+        self.counters[key]["value"] += value
+        self._check_report()
+    
+    def gauge(self, name: str, value: float, tags: Dict[str, str] = None) -> None:
+        """Set a gauge metric to a specific value."""
+        key = self._get_key(name, tags)
+        self.gauges[key] = {
+            "name": name,
+            "value": value,
+            "tags": tags or {}
+        }
+        self._check_report()
+    
+    def histogram(self, name: str, value: float, tags: Dict[str, str] = None) -> None:
+        """Record a value in a histogram metric."""
+        key = self._get_key(name, tags)
+        if key not in self.histograms:
+            self.histograms[key] = {
+                "name": name,
+                "values": [],
+                "tags": tags or {}
+            }
+        self.histograms[key]["values"].append(value)
+        self._check_report()
+    
+    def _get_key(self, name: str, tags: Dict[str, str] = None) -> str:
+        """Create a unique key for a metric based on its name and tags."""
+        if not tags:
+            return name
+            
+        # Sort tags for consistent keys
+        sorted_tags = sorted(tags.items())
+        tag_str = ",".join(f"{k}={v}" for k, v in sorted_tags)
+        return f"{name}[{tag_str}]"
+    
+    def _check_report(self) -> None:
+        """Check if it's time to report metrics."""
+        now = time.time()
+        if now - self.last_report_time >= self.report_interval:
+            self.report()
+            self.last_report_time = now
+    
+    def report(self) -> None:
+        """Report all collected metrics."""
+        metrics = {
+            "timestamp": datetime.now().isoformat(),
+            "counters": list(self.counters.values()),
+            "gauges": list(self.gauges.values()),
+            "histograms": []
+        }
+        
+        # Process histogram stats
+        for h in self.histograms.values():
+            values = h["values"]
+            if not values:
+                continue
+                
+            # Calculate basic stats
+            sorted_values = sorted(values)
+            hist_data = {
+                "name": h["name"],
+                "tags": h["tags"],
+                "count": len(values),
+                "sum": sum(values),
+                "min": min(values),
+                "max": max(values),
+                "avg": sum(values) / len(values),
+                "p50": sorted_values[int(len(sorted_values) * 0.5)],
+                "p90": sorted_values[int(len(sorted_values) * 0.9)],
+                "p99": sorted_values[int(len(sorted_values) * 0.99)] if len(sorted_values) >= 100 else sorted_values[-1]
+            }
+            metrics["histograms"].append(hist_data)
+            
+        # Reset histograms after reporting
+        self.histograms = {}
+        
+        # Print metrics to stdout
+        print(f"[METRICS] {json.dumps(metrics)}")
+
+
+class MiniLogger:
+    """Simple logging system with context and trace integration."""
+    
+    LEVELS = {
+        "DEBUG": 10,
+        "INFO": 20,
+        "WARNING": 30,
+        "ERROR": 40,
+        "CRITICAL": 50
+    }
+    
+    # ANSI color codes
+    COLORS = {
+        "DEBUG": "\033[94m",     # Blue
+        "INFO": "\033[92m",      # Green
+        "WARNING": "\033[93m",   # Yellow
+        "ERROR": "\033[91m",     # Red
+        "CRITICAL": "\033[95m",  # Purple
+        "RESET": "\033[0m"       # Reset
+    }
+    
+    def __init__(self, name: str, level: str = "INFO", use_colors: bool = True):
+        """Initialize logger with a name and minimum level."""
+        self.name = name
+        self.level = self.LEVELS.get(level.upper(), 20)
+        self.use_colors = use_colors
+        self.context = {}
+        self.tracer = None
+    
+    def set_tracer(self, tracer: MiniTrace) -> None:
+        """Associate a tracer with this logger for automatic trace context."""
+        self.tracer = tracer
+    
+    def add_context(self, key: str, value: Any) -> 'MiniLogger':
+        """Add context data to all subsequent log messages."""
+        self.context[key] = value
+        return self
+    
+    def update_context(self, data: Dict[str, Any]) -> 'MiniLogger':
+        """Update multiple context values at once."""
+        self.context.update(data)
+        return self
+    
+    def clear_context(self) -> 'MiniLogger':
+        """Clear all context data."""
+        self.context.clear()
+        return self
+    
+    def _log(self, level_name: str, message: str, extra: Dict[str, Any] = None) -> None:
+        """Internal method to handle logging."""
+        level_value = self.LEVELS.get(level_name, 0)
+        if level_value < self.level:
+            return
+            
+        # Build log data
+        log_data = {
+            "timestamp": datetime.now().isoformat(),
+            "level": level_name,
+            "logger": self.name,
+            "message": message
+        }
+        
+        # Add context if available
+        if self.context:
+            log_data["context"] = self.context.copy()
+            
+        # Add trace context if available
+        if self.tracer and self.tracer.current_trace_id:
+            log_data["trace_id"] = self.tracer.current_trace_id
+            log_data["span_id"] = self.tracer.current_span_id
+            
+        # Add extra data if provided
+        if extra:
+            for k, v in extra.items():
+                # Don't overwrite existing fields
+                if k not in log_data:
+                    log_data[k] = v
+        
+        # Format as string for stdout
+        if self.use_colors:
+            color = self.COLORS.get(level_name, self.COLORS["RESET"])
+            reset = self.COLORS["RESET"]
+            log_str = f"{log_data['timestamp']} [{color}{level_name}{reset}] {self.name}: {message}"
+        else:
+            log_str = f"{log_data['timestamp']} [{level_name}] {self.name}: {message}"
+            
+        # Add trace/span info if available
+        if self.tracer and self.tracer.current_trace_id:
+            trace_id = self.tracer.current_trace_id
+            span_id = self.tracer.current_span_id or "none"
+            log_str += f" (trace={trace_id[:8]}... span={span_id[:8]}...)"
+            
+        print(log_str)
+    
+    def debug(self, message: str, **kwargs) -> None:
+        """Log a debug message."""
+        self._log("DEBUG", message, kwargs)
+    
+    def info(self, message: str, **kwargs) -> None:
+        """Log an info message."""
+        self._log("INFO", message, kwargs)
+    
+    def warning(self, message: str, **kwargs) -> None:
+        """Log a warning message."""
+        self._log("WARNING", message, kwargs)
+    
+    def error(self, message: str, **kwargs) -> None:
+        """Log an error message."""
+        self._log("ERROR", message, kwargs)
+    
+    def critical(self, message: str, **kwargs) -> None:
+        """Log a critical message."""
+        self._log("CRITICAL", message, kwargs)
+    
+    @contextmanager
+    def span_logger(self, name: str, level: str = "INFO", **span_attrs):
+        """Create a logger that automatically creates a span for the duration of a context."""
+        if not self.tracer:
+            # Just yield self if no tracer is configured
+            yield self
+            return
+            
+        # Start span
+        span_id = self.tracer.start_span(name, span_attrs)
+        try:
+            # Log the span start if level is sufficient
+            self._log(level, f"Started {name}", span_attrs)
+            yield self
+        finally:
+            # Log the span end
+            duration = None
+            if span_id in self.tracer.active_spans:
+                start = self.tracer.active_spans[span_id]["span"]["start_time"]
+                duration = int((time.time() - start) * 1000)
+                
+            self._log(level, f"Completed {name} in {duration}ms", span_attrs)
+            self.tracer.end_span(span_id)
+
+
+class MiniTelemetry:
+    """Main entry point combining traces, metrics, and logs."""
     
     def __init__(
-        self,
-        service_name: str,                           # Nom du service (obligatoire)
-        service_version: str = "1.0.0",              # Version du service
-        environment: str = "development",            # Environnement (dev, staging, prod)
-        resource_attributes: Optional[Dict] = None,  # Attributs supplémentaires
-        log_level: int = logging.INFO,               # Niveau de log par défaut
-        use_json_logs: bool = False                  # Format JSON pour les logs
+        self, 
+        service_name: str,
+        service_version: str = "1.0.0",
+        environment: str = "development",
+        log_level: str = "INFO",
+        use_colors: bool = True,
+        metrics_interval: int = 10
     ):
-        """
-        Initialise les outils de télémétrie avec une configuration de base.
-        
-        Toute la configuration est faite ici, les développeurs n'ont plus qu'à
-        utiliser les outils exposés.
-        """
-        # Stocker le nom du service pour référence ultérieure
+        """Initialize telemetry tools for a service."""
         self.service_name = service_name
         self.service_info = {
             "service": service_name,
@@ -71,293 +397,131 @@ class TelemetryTools:
             "environment": environment
         }
         
-        # Étape 1: Configurer la ressource OpenTelemetry
-        # La ressource identifie la source des données de télémétrie
-        # et permet de les filtrer/organiser dans les outils d'analyse
-        resource_attrs = {
-            # Ces attributs sont standardisés par OpenTelemetry
-            SERVICE_NAME: service_name,
-            SERVICE_VERSION: service_version,
-            DEPLOYMENT_ENVIRONMENT: environment
-        }
+        # Create the three pillars of observability
+        self.tracer = MiniTrace(service_name)
+        self.metrics = MiniMetrics(service_name)
+        self.logger = MiniLogger(service_name, log_level, use_colors)
         
-        # Ajouter des attributs supplémentaires si fournis
-        if resource_attributes:
-            resource_attrs.update(resource_attributes)
+        # Set metrics reporting interval
+        self.metrics.report_interval = metrics_interval
         
-        # Créer la ressource utilisée par tous les signaux
-        self.resource = Resource.create(resource_attrs)
+        # Connect logger and tracer for automatic context
+        self.logger.set_tracer(self.tracer)
+        self.logger.update_context(self.service_info)
         
-        # Étape 2: Configuration du traçage
-        self._setup_tracing()
-        
-        # Étape 3: Configuration des métriques
-        self._setup_metrics()
-        
-        # Étape 4: Configuration du logging (avec intégration trace)
-        self._setup_logging(log_level, use_json_logs)
-        
-        # Initialiser le dictionnaire de contexte
-        self._context_data = {}
-        
-        # Afficher un message d'initialisation
-        self.logger.info(f"TelemetryTools initialisé pour {service_name}")
+        # Log initialization
+        self.logger.info(f"MiniTelemetry initialized for {service_name} ({environment})")
     
-    def _setup_tracing(self):
-        """
-        Configure le système de traçage OpenTelemetry.
-        
-        Le traçage capture le chemin d'exécution à travers le code, les services
-        et les systèmes distribués, sous forme de "spans".
-        
-        Export exclusivement vers stdout - aucun composant externe requis.
-        """
-        # Étape 1: Créer un provider de trace avec notre ressource
-        # Le TracerProvider est le point d'entrée pour la création de tracers
-        trace_provider = TracerProvider(resource=self.resource)
-        
-        # Étape 2: Configurer l'exportation des traces
-        # ConsoleSpanExporter affiche les spans dans la sortie standard (stdout)
-        # Aucune configuration supplémentaire ou composant externe n'est nécessaire
-        console_exporter = ConsoleSpanExporter()
-        
-        # BatchSpanProcessor collecte les spans en mémoire et les exporte par lots
-        # pour améliorer les performances
-        span_processor = BatchSpanProcessor(console_exporter)
-        trace_provider.add_span_processor(span_processor)
-        
-        # Étape 3: Définir ce provider comme provider global
-        # Cela permet aux bibliothèques instrumentées d'utiliser ce provider
-        trace.set_tracer_provider(trace_provider)
-        
-        # Conserver une référence au provider
-        self.tracer_provider = trace_provider
-        
-        # Créer un tracer par défaut pour ce service
-        self.tracer = trace.get_tracer(self.service_name)
-        
-        # Créer un propagateur pour extraire/injecter le contexte
-        # Utilisé pour la corrélation avec les logs
-        self.propagator = TraceContextTextMapPropagator()
-    
-    def _setup_metrics(self):
-        """
-        Configure le système de métriques OpenTelemetry.
-        
-        Les métriques capturent des données numériques comme des compteurs,
-        des jauges et des histogrammes pour mesurer la performance et les états.
-        
-        Export exclusivement vers stdout - aucun composant externe requis.
-        """
-        # Étape 1: Configurer l'exportation des métriques
-        # ConsoleMetricExporter affiche les métriques dans la sortie standard (stdout)
-        # Aucune configuration supplémentaire ou composant externe n'est nécessaire
-        console_exporter = ConsoleMetricExporter()
-        
-        # PeriodicExportingMetricReader collecte et exporte les métriques périodiquement
-        reader = PeriodicExportingMetricReader(
-            console_exporter,
-            export_interval_millis=5000  # Exporter toutes les 5 secondes
-        )
-        
-        # Étape 2: Créer un provider de métriques avec notre ressource
-        meter_provider = MeterProvider(
-            resource=self.resource,
-            metric_readers=[reader]
-        )
-        
-        # Étape 3: Définir ce provider comme provider global
-        metrics.set_meter_provider(meter_provider)
-        
-        # Conserver une référence au provider
-        self.meter_provider = meter_provider
-        
-        # Créer un meter par défaut pour ce service
-        self.meter = metrics.get_meter(self.service_name)
-    
-    def _setup_logging(self, log_level: int, use_json: bool):
-        """
-        Configure le système de logging avec intégration de traces.
-        
-        L'intégration permet d'ajouter automatiquement les identifiants
-        de trace et de span aux entrées de log correspondantes.
-        
-        Export exclusivement vers stdout - aucun composant externe requis.
-        """
-        # Étape 1: Créer un formateur de logs
-        if use_json:
-            # Format JSON pour les environnements de production
-            # Facilite l'analyse avec des outils comme ELK
-            formatter = JsonLogFormatter(self.tracer_provider)
+    @contextmanager
+    def trace(self, name: str, attributes=None, **kwargs):
+        """Start a new trace or span, depending on context."""
+        # Combine attributes dict and kwargs
+        if attributes is None:
+            attributes = {}
+        if isinstance(attributes, dict):
+            all_attrs = {**attributes, **kwargs}
         else:
-            # Format texte pour le développement
-            formatter = TraceContextFormatter(
-                fmt='%(asctime)s [%(levelname)s] %(name)s - '
-                    'trace_id=%(otel_trace_id)s span_id=%(otel_span_id)s - %(message)s',
-                datefmt='%Y-%m-%d %H:%M:%S'
-            )
-        
-        # Étape 2: Configurer le handler de base (stdout)
-        # Les logs sont envoyés directement à la sortie standard
-        # Aucun composant externe n'est nécessaire
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(formatter)
-        
-        # Étape 3: Configurer le logger root
-        root_logger = logging.getLogger()
-        root_logger.handlers = [handler]
-        root_logger.setLevel(log_level)
-        
-        # Créer un logger par défaut pour ce service
-        self.logger = logging.getLogger(self.service_name)
-    
-    def get_tracer(self, name: Optional[str] = None) -> trace.Tracer:
-        """
-        Obtient un tracer OpenTelemetry pour un module ou composant spécifique.
-        
-        Args:
-            name: Nom du module/composant (default: nom du service)
+            all_attrs = kwargs
             
-        Returns:
-            Un tracer OpenTelemetry configuré
-        """
-        tracer_name = name or self.service_name
-        return trace.get_tracer(tracer_name)
-    
-    def get_meter(self, name: Optional[str] = None) -> metrics.Meter:
-        """
-        Obtient un meter OpenTelemetry pour un module ou composant spécifique.
+        # Always include service info in traces
+        trace_attrs = {**self.service_info, **all_attrs}
         
-        Args:
-            name: Nom du module/composant (default: nom du service)
+        # If no trace is active, start a new one
+        new_trace = not self.tracer.current_trace_id
+        if new_trace:
+            self.tracer.start_trace()
             
-        Returns:
-            Un meter OpenTelemetry configuré
-        """
-        meter_name = name or self.service_name
-        return metrics.get_meter(meter_name)
+        # Start the span
+        span_id = self.tracer.start_span(name, trace_attrs)
+        
+        # Log span start, including span_id
+        self.logger.info(f"Started {name}")
+        
+        try:
+            yield span_id
+        finally:
+            end_time = time.time()
+            if span_id in self.tracer.active_spans:
+                start = self.tracer.active_spans[span_id]["span"]["start_time"]
+                duration_ms = int((end_time - start) * 1000)
+                # Log span end
+                self.logger.info(f"Completed {name} in {duration_ms}ms")
+                # Add duration metric
+                self.metrics.histogram(
+                    f"span.duration", 
+                    duration_ms,
+                    {"name": name, "service": self.service_name}
+                )
+            self.tracer.end_span(span_id)
     
-    def get_logger(self, name: Optional[str] = None) -> logging.Logger:
-        """
-        Obtient un logger pour un module ou composant spécifique.
-        
-        Le logger est configuré pour inclure les IDs de traces dans les messages.
-        
-        Args:
-            name: Nom du module/composant (default: nom du service)
-            
-        Returns:
-            Un logger configuré
-        """
-        logger_name = name or self.service_name
-        return logging.getLogger(logger_name)
+    def count(self, name: str, value: int = 1, tags: Dict[str, str] = None) -> None:
+        """Increment a counter metric."""
+        if tags is None:
+            tags = {}
+        tags.update({"service": self.service_name})
+        self.metrics.counter(name, value, tags)
     
-    def set_context_data(self, key: str, value: Any) -> None:
-        """
-        Stocke une valeur dans le contexte de télémétrie.
-        
-        Args:
-            key: Clé du contexte
-            value: Valeur à stocker
-        """
-        self._context_data[key] = value
+    def gauge(self, name: str, value: float, tags: Dict[str, str] = None) -> None:
+        """Set a gauge metric."""
+        if tags is None:
+            tags = {}
+        tags.update({"service": self.service_name})
+        self.metrics.gauge(name, value, tags)
     
-    def get_context_data(self, key: str, default: Any = None) -> Any:
-        """
-        Récupère une valeur du contexte de télémétrie.
-        
-        Args:
-            key: Clé du contexte
-            default: Valeur par défaut si la clé n'existe pas
-            
-        Returns:
-            Valeur stockée ou valeur par défaut
-        """
-        return self._context_data.get(key, default)
+    def timing(self, name: str, value_ms: float, tags: Dict[str, str] = None) -> None:
+        """Record a timing metric."""
+        if tags is None:
+            tags = {}
+        tags.update({"service": self.service_name})
+        self.metrics.histogram(name, value_ms, tags)
     
-    def clear_context_data(self) -> None:
-        """
-        Efface toutes les données de contexte.
-        """
-        self._context_data.clear()
-    
-    def update_context_data(self, context_dict: Dict[str, Any]) -> None:
-        """
-        Ajoute ou met à jour plusieurs valeurs dans le contexte de télémétrie.
-        
-        Args:
-            context_dict: Dictionnaire de paires clé-valeur à ajouter au contexte
-        """
-        # Utiliser le span courant si disponible, sinon juste stocker les données
-        span = trace.get_current_span()
-        
-        # Mettre à jour le contexte interne
-        self._context_data.update(context_dict)
-        
-        # Si nous avons un span actif, ajouter aussi comme attributs
-        if span.get_span_context().is_valid:
-            for key, value in context_dict.items():
-                span.set_attribute(key, value)
+    @contextmanager
+    def timed(self, name: str, tags: Dict[str, str] = None):
+        """Time a block of code and record the duration as a metric."""
+        start = time.time()
+        try:
+            yield
+        finally:
+            duration_ms = (time.time() - start) * 1000
+            self.timing(name, duration_ms, tags)
 
 
-class TraceContextFormatter(logging.Formatter):
-    """
-    Formateur de logs qui ajoute automatiquement les ID de trace et de span.
+# Example usage
+if __name__ == "__main__":
+    # Initialize MiniTelemetry
+    telemetry = MiniTelemetry("example-service", environment="dev")
     
-    Cela permet la corrélation automatique entre logs et traces.
-    """
+    # Basic logging
+    telemetry.logger.info("Application started")
+    telemetry.logger.debug("Debug message")
     
-    def format(self, record):
-        """Format le message avec les informations de trace."""
-        # Obtenir le span courant du contexte
-        span_context = trace.get_current_span().get_span_context()
-        
-        # Ajouter les IDs au record si un span est actif
-        if span_context.is_valid:
-            # Formater les IDs en hexadécimal lisible
-            record.otel_trace_id = format_trace_id(span_context.trace_id)
-            record.otel_span_id = format_span_id(span_context.span_id)
-        else:
-            # Pas de span actif, utiliser des valeurs vides
-            record.otel_trace_id = "0" * 16
-            record.otel_span_id = "0" * 8
-        
-        # Formater le message avec le formateur parent
-        return super().format(record)
-
-
-class JsonLogFormatter(logging.Formatter):
-    """
-    Formateur de logs qui génère des messages JSON avec contexte de trace.
+    # Counter metric
+    telemetry.count("app.start", 1)
     
-    Utile pour les environnements de production et l'analyse avec des outils comme ELK.
-    """
+    # Timing with automatic metrics
+    with telemetry.timed("important_operation", {"type": "demo"}):
+        # Creating a trace with spans
+        with telemetry.trace("main_process"):
+            telemetry.logger.info("Starting main process")
+            time.sleep(0.1)
+            
+            # Nested span
+            with telemetry.trace("sub_task", {"priority": "high"}):
+                telemetry.logger.info("Working on subtask")
+                telemetry.count("tasks.processed", 5)
+                time.sleep(0.2)
+                
+            # Another operation
+            with telemetry.trace("another_task"):
+                telemetry.logger.warning("Task taking longer than expected")
+                time.sleep(0.3)
+                
+    # Gauge metric
+    telemetry.gauge("system.memory.usage", 42.5)
     
-    def __init__(self, tracer_provider=None):
-        super().__init__()
-        self.tracer_provider = tracer_provider
+    # Force metrics report
+    telemetry.metrics.report()
     
-    def format(self, record):
-        """Convertit l'enregistrement en JSON avec métadonnées de trace."""
-        # Créer un dictionnaire de base avec les champs standard
-        log_data = {
-            "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S.%fZ"),
-            "level": record.levelname,
-            "name": record.name,
-            "message": record.getMessage()
-        }
-        
-        # Ajouter les données d'exception si présentes
-        if record.exc_info:
-            log_data["exception"] = self.formatException(record.exc_info)
-        
-        # Ajouter les IDs de trace si disponibles
-        span_context = trace.get_current_span().get_span_context()
-        if span_context.is_valid:
-            log_data["trace_id"] = format_trace_id(span_context.trace_id)
-            log_data["span_id"] = format_span_id(span_context.span_id)
-        
-        # Convertir en JSON
-        return json.dumps(log_data)
+    telemetry.logger.info("Application finished")
 
 
