@@ -42,19 +42,30 @@ class TelemetryOptions:
     use_json_logs: bool = False
     resource_attributes: Dict[str, str] = field(default_factory=dict)
 
+    # Mapping of standard attributes to OpenTelemetry resource attributes
+    STANDARD_ATTRIBUTES = {
+        "version": "service.version",
+        "environment": "deployment.environment",
+        "service_name": "service.name",
+        "service_version": "service.version",
+        "deployment_environment": "deployment.environment"
+    }
+
     def __post_init__(self):
         """Process custom attributes and add them to resource_attributes."""
         # Map standard attributes to resource_attributes
-        standard_attrs = {
-            "service.version": self.version,
-            "deployment.environment": self.environment
-        }
-        self.resource_attributes.update(standard_attrs)
+        for attr, value in self.__dict__.items():
+            if attr in self.STANDARD_ATTRIBUTES:
+                self.resource_attributes[self.STANDARD_ATTRIBUTES[attr]] = str(value)
+            elif attr not in ['resource_attributes', 'STANDARD_ATTRIBUTES']:
+                self.resource_attributes[attr] = str(value)
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Handle custom attributes by adding them to resource_attributes."""
         super().__setattr__(name, value)
-        if name not in ['version', 'environment', 'log_level', 'use_json_logs', 'resource_attributes']:
+        if name in self.STANDARD_ATTRIBUTES:
+            self.resource_attributes[self.STANDARD_ATTRIBUTES[name]] = str(value)
+        elif name not in ['resource_attributes', 'STANDARD_ATTRIBUTES']:
             self.resource_attributes[name] = str(value)
 
 class Telemetry:
@@ -321,4 +332,4 @@ class JsonLogFormatter(logging.Formatter):
         # Convert to JSON string
         return json.dumps(log_data)
 
-__all__ = ["Telemetry"] 
+__all__ = ["Telemetry", "TelemetryOptions"] 
