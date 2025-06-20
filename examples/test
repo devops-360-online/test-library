@@ -164,32 +164,29 @@ FINOPS & TAGGING	Snowflake Tags + Resource Monitors	ALTER WAREHOUSE SET TAG ...	
 AWS Cost Tags + CUR	Tags S3/Batch etc.	MàJ 1×/jour	CUR → Athena	Grafana/Elastic report	IAM	Show-back / charge-back	Retard ≥24 h
 
 
-| **Domaine / Capacité** | **Option / Outil** | **BUILD : mise en place** | **RUN : latence & exécution** | **FINOPS : coûts typiques** | **MONITORING / Observabilité** | **Gouvernance & Sécurité** | **Cas d'usage idéal** | **Limites / points de vigilance** |
-|-------------------------|---------------------|----------------------------|--------------------------------|------------------------------|--------------------------------|---------------------------|----------------------|----------------------------------|
-| **INGESTION** | | | | | | | | |
-| | Snowpipe (auto-ingest) | Stage S3 + SNS/SQS + CREATE PIPE | < 5 min après dépôt fichier | 0,06 crédit/1 000 fichiers + compute serverless [phdata.io] | Vue PIPE_USAGE_HISTORY, action Snowpipe Load Status du plug-in Control-M [docs.bmc.com] | Rôle propriétaire + privilège MONITOR USAGE | Flux temps-réel, petits fichiers fréquents | Tarif par fichier ; config AWS (SNS/SQS) |
-| | COPY INTO (SnowSQL) | Script CLI / Control-M ; warehouse dédié | Batch planifié (minutes → h) | Crédit/min du warehouse ; rentable sur gros volumes | QUERY_HISTORY + logs Control-M | Traçabilité complète dans Control-M | Batch volumineux, contrôle strict | Warehouse à dimensionner ; pas temps-réel |
-| | Tasks + proc. stockées | CREATE TASK ... EXECUTE IMMEDIATE | Serverless interne ; minute-cron | 1,5× tarif warehouse standard [docs.snowflake.com] | TASK_HISTORY [docs.snowflake.com] | Moins accessible depuis Control-M | Chaînage 100 % Snowflake | Surcoût ; supervision via vues seulement |
-| **TRANSFORMATION** | | | | | | | | |
-| | dbt Workspaces (preview) | IDE Snowsight, 1 workspace / user, Git clone | dbt run dans Snowflake ; DAG compilé | Crédit warehouse utilisé ; aucune licence | Runs visibles dans Workspace | Contrôle via rôles + Git PAT | PoC, petite équipe SQL | Preview ; pas multi-tenant natif [medium.com] |
-| | dbt CLI / runner | Container/VM, GitLab CI | Orchestré (Control-M, CI) | Compute warehouse ; coût runner minime | Logs dbt + QUERY_HISTORY | IAM GitLab + Secret | DevOps maîtrisant CI/CD | Infra à maintenir |
-| | Snowpark – proc. Python | CREATE PROCEDURE SQL | Job ad-hoc ; pas de cold-start | Crédit warehouse normal | QUERY_HISTORY | Code verrouillé Snowflake | Algo Python ponctuels | Libs limitées ; debug logs |
-| | Snowpark – SPCS (container) | Docker → Registry Snowflake → CREATE SERVICE | Service persistant ; auto-scale | Pool facturé IDLE/ACTIVE [docs.snowflake.com] | SNOWPARK_CONTAINER_SERVICES_HISTORY | Rôle ADMIN + Registry token | Micro-services ML, APIs internes | Pool payant même idle ; packaging |
-| | SQL proc./UDF | Pur SQL/JS, aucun outil externe | Très rapide ; pas de dépendance | Crédit warehouse | QUERY_HISTORY | Droits objets / GRANTs | Petites logiques SQL | Pas de tests/dagit ; portabilité nulle |
-| **ORCHESTRATION CONTROL-M** | | | | | | | | |
-| | AWS Batch plug-in | Type de job dédié | Soumet + poll AWS API | Success/fail codes intégrés | Logs Batch → CloudWatch | IAM rôle Batch | Pipeline compute sur AWS | Besoin Agents CloudWatch |
-| | Snowpipe Load Status | Job plugin (≥ 9.0.21) | Surveille pipe X min | Inclus dans plugin | Statut exposé à Control-M | OAuth Snowflake | Garantir fin du Pipe | Plugin requis [docs.bmc.com] |
-| | Job SQL "TASK_HISTORY" | Simple SQL dans Control-M | Interroge état tâche | Gratuit (query) | Alarme sur STATE='FAILED' | Login applicatif | Supervision Tasks | Latence vues ~45 min |
-| **GIT INTÉGRATION** | | | | | | | | |
-| | Snowflake Git repository | API INTEGRATION + CREATE GIT REPOSITORY [docs.snowflake.com] | Pull à la demande/cron | Crédits minimes (clone) | Actions auditées ACCOUNT_USAGE | Secret PAT Git | Déploiements SQL/self-service | Pull only ; pas d'event trigger |
-| | GitLab Webhook + Lambda | Hook Git → Lambda → Snowflake | Temps réel (sec) | $ Lambda + API GW | Logs CloudWatch | Secrets dans Lambda | CI push immédiat | Dev & ops AWS à maintenir |
-| | GitLab CI Runner | Job CI push SQL via snowsql | Dépend pipeline CI | Coût runner | Logs GitLab + Snowflake | PAT GitLab & key | Full DevOps | Runner admin nécessaire |
-| **OBSERVABILITÉ** | | | | | | | | |
-| | CloudWatch + S3 / Athena + Managed Grafana | Export Snowflake COPY INTO @S3 ; logs AWS natifs | Batch → Athena ; Dash temps-réel CloudWatch | S3 (ct€/GB) + $5/TB scan | Grafana mix Athena & CW → dashboards | IAM roles + S3 ACLs | Vue 360°, coût faible | Logs Snowflake ≠ temps-réel |
-| | ELK / OpenSearch | Kinesis → Elastic | Presque temps-réel | Nœuds ES (>€) | Kibana requêtes/alertes | Index RBAC | Recherche puissante | Coût fixe élevé |
-| | Datadog SaaS | Agents → Datadog API | < 1 min | $/log & metric | UI unifiée | RBAC SaaS | Time-to-value rapide | Tarifs volumétriques élevés |
-| **FINOPS & TAGGING** | | | | | | | | |
-| | Snowflake Tags + Resource Monitors | ALTER WAREHOUSE SET TAG ... | Crédit visibles par TAG | Vues WAREHOUSE_METERING_HISTORY, alertes | Snowsight budgets | RBAC tags | Alloc. coûts BU | Discipline tagging |
-| | AWS Cost Tags + CUR | Tags S3/Batch etc. | MàJ 1×/jour | CUR → Athena | Grafana/Elastic report | IAM | Show-back / charge-back | Retard ≥24 h |
-
-
+Domaine / Capacité,Option / Outil,BUILD : mise en place,RUN : latence & exécution,FINOPS : coûts typiques,MONITORING / Observabilité,Gouvernance & Sécurité,Cas d'usage idéal,Limites / points de vigilance
+INGESTION,,,,,,,,
+,Snowpipe (auto-ingest),Stage S3 + SNS/SQS + CREATE PIPE,< 5 min après dépôt fichier,"0,06 crédit/1 000 fichiers + compute serverless","Vue PIPE_USAGE_HISTORY, action Snowpipe Load Status du plug-in Control-M",Rôle propriétaire + privilège MONITOR USAGE,"Flux temps-réel, petits fichiers fréquents","Tarif par fichier ; config AWS (SNS/SQS)"
+,COPY INTO (SnowSQL),Script CLI / Control-M ; warehouse dédié,Batch planifié (minutes → h),Crédit/min du warehouse ; rentable sur gros volumes,QUERY_HISTORY + logs Control-M,Traçabilité complète dans Control-M,"Batch volumineux, contrôle strict",Warehouse à dimensionner ; pas temps-réel
+,Tasks + proc. stockées,CREATE TASK ... EXECUTE IMMEDIATE,Serverless interne ; minute-cron,1,5× tarif warehouse standard,TASK_HISTORY,Moins accessible depuis Control-M,Chaînage 100 % Snowflake,Surcoût ; supervision via vues seulement
+TRANSFORMATION,,,,,,,,
+,dbt Workspaces (preview),"IDE Snowsight, 1 workspace / user, Git clone",dbt run dans Snowflake ; DAG compilé,Crédit warehouse utilisé ; aucune licence,Runs visibles dans Workspace,Contrôle via rôles + Git PAT,"PoC, petite équipe SQL",Preview ; pas multi-tenant natif
+,dbt CLI / runner,"Container/VM, GitLab CI","Orchestré (Control-M, CI)",Compute warehouse ; coût runner minime,Logs dbt + QUERY_HISTORY,IAM GitLab + Secret,DevOps maîtrisant CI/CD,Infra à maintenir
+,Snowpark – proc. Python,CREATE PROCEDURE SQL,Job ad-hoc ; pas de cold-start,Crédit warehouse normal,QUERY_HISTORY,Code verrouillé Snowflake,Algo Python ponctuels,Libs limitées ; debug logs
+,Snowpark – SPCS (container),Docker → Registry Snowflake → CREATE SERVICE,Service persistant ; auto-scale,Pool facturé IDLE/ACTIVE,SNOWPARK_CONTAINER_SERVICES_HISTORY,Rôle ADMIN + Registry token,"Micro-services ML, APIs internes",Pool payant même idle ; packaging
+,SQL proc./UDF,"Pur SQL/JS, aucun outil externe",Très rapide ; pas de dépendance,Crédit warehouse,QUERY_HISTORY,Droits objets / GRANTs,Petites logiques SQL,Pas de tests/dagit ; portabilité nulle
+ORCHESTRATION CONTROL-M,,,,,,,,
+,AWS Batch plug-in,Type de job dédié,Soumet + poll AWS API,Success/fail codes intégrés,Logs Batch → CloudWatch,IAM rôle Batch,Pipeline compute sur AWS,Besoin Agents CloudWatch
+,Snowpipe Load Status,Job plugin (≥ 9.0.21),Surveille pipe X min,Inclus dans plugin,Statut exposé à Control-M,OAuth Snowflake,Garantir fin du Pipe,Plugin requis
+,Job SQL "TASK_HISTORY",Simple SQL dans Control-M,Interroge état tâche,Gratuit (query),Alarme sur STATE='FAILED',Login applicatif,Supervision Tasks,Latence vues ~45 min
+GIT INTÉGRATION,,,,,,,,
+,Snowflake Git repository,API INTEGRATION + CREATE GIT REPOSITORY,Pull à la demande/cron,Crédits minimes (clone),Actions auditées ACCOUNT_USAGE,Secret PAT Git,Déploiements SQL/self-service,Pull only ; pas d'event trigger
+,GitLab Webhook + Lambda,Hook Git → Lambda → Snowflake,Temps réel (sec),$ Lambda + API GW,Logs CloudWatch,Secrets dans Lambda,CI push immédiat,Dev & ops AWS à maintenir
+,GitLab CI Runner,Job CI push SQL via snowsql,Dépend pipeline CI,Coût runner,Logs GitLab + Snowflake,PAT GitLab & key,Full DevOps,Runner admin nécessaire
+OBSERVABILITÉ,,,,,,,,
+,CloudWatch + S3 / Athena + Managed Grafana,Export Snowflake COPY INTO @S3 ; logs AWS natifs,Batch → Athena ; Dash temps-réel CloudWatch,S3 (ct€/GB) + $5/TB scan,Grafana mix Athena & CW → dashboards,IAM roles + S3 ACLs,"Vue 360°, coût faible",Logs Snowflake ≠ temps-réel
+,ELK / OpenSearch,Kinesis → Elastic,Presque temps-réel,Nœuds ES (>€),Kibana requêtes/alertes,Index RBAC,Recherche puissante,Coût fixe élevé
+,Datadog SaaS,Agents → Datadog API,< 1 min,$/log & metric,UI unifiée,RBAC SaaS,Time-to-value rapide,Tarifs volumétriques élevés
+FINOPS & TAGGING,,,,,,,,
+,Snowflake Tags + Resource Monitors,ALTER WAREHOUSE SET TAG ...,Crédit visibles par TAG,"Vues WAREHOUSE_METERING_HISTORY, alertes",Snowsight budgets,RBAC tags,Alloc. coûts BU,Discipline tagging
+,AWS Cost Tags + CUR,Tags S3/Batch etc.,MàJ 1×/jour,CUR → Athena,Grafana/Elastic report,IAM,Show-back / charge-back,Retard ≥24 h 
