@@ -1,0 +1,129 @@
+Contrôle-M propose des plug-ins natifs pour AWS et Snowflake. Par exemple, le plug-in Control-M for AWS Batch permet de lancer et suivre des jobs AWS Batch en lisant directement leur statut, sortie et résultats
+documents.bmc.com
+. De même, le plug-in Control-M for Snowflake sait exécuter des requêtes SQL et surveiller des objets Snowflake. Il inclut notamment l’action “Snowpipe Load Status” qui contrôle la progression d’un Snowpipe sur une durée donnée et retourne un état de réussite/échec
+documents.bmc.com
+. Il peut aussi exécuter n’importe quelle requête SQL Snowflake (action “Execute SQL Statement”)
+documents.bmc.com
+.
+AWS Batch : Control-M intègre un job type AWS Batch qui se charge de soumettre le job et de « polling » sur son état. Le plug-in signale le succès ou l’échec du job selon les codes AWS Batch
+documents.bmc.com
+. En parallèle, on peut utiliser AWS CloudWatch ou des événements CloudWatch EventBridge pour être notifié (ex. les logs d’instance conteneur peuvent remonter dans CloudWatch Logs
+docs.bmc.com
+). Control-M peut aussi simplement attendre la fin d’un job puis vérifier via l’API AWS Batch ou un script le statut du job.
+Snowpipe (Snowflake) : Snowpipe expose à la fois un REST API et des vues d’historique (ACCOUNT_USAGE) pour suivre les chargements. Control-M propose l’action Snowpipe Load Status qui « surveille la progression d’un Snowpipe » et échoue en cas d’erreur
+documents.bmc.com
+. En complément, on peut interroger SNOWFLAKE.ACCOUNT_USAGE.PIPE_USAGE_HISTORY (ou utiliser la table fonction PIPE_USAGE_HISTORY) pour connaître l’historique des fichiers chargés, ou configurer des notifications SNS/SQS via les options d’erreur de Snowpipe
+docs.snowflake.com
+documents.bmc.com
+.
+Snowflake SQL Tasks (serverless) : Control-M peut exécuter une commande EXECUTE TASK via le plug-in SQL ou exécuter directement la requête SQL associée. Pour suivre le statut, on s’appuie sur les vues metadata de Snowflake. Par exemple, la vue SNOWFLAKE.ACCOUNT_USAGE.TASK_HISTORY liste chaque exécution de tâche (avec état SUCCEEDED/FAILED, codes d’erreurs, dates)
+docs.snowflake.com
+. Il est alors possible de lancer un job Control-M de type SQL qui interroge TASK_HISTORY ou QUERY_HISTORY et de basculer en échec si STATE = 'FAILED'. On peut aussi utiliser la fonction d’Information Schema TASK_HISTORY (renvoie les exécutions en cours) ou la vue SERVERLESS_TASK_HISTORY pour les tâches serverless (bien que cette dernière ne remonte que les crédits consommés).
+Intégration synchrone dans Control-M : Dans Control-M, on structurerait typiquement le workflow de façon synchrone : le job AWS Batch (ou la soumission Snowpipe) est suivi immédiatement d’un job de vérification (via le plug-in ou un script Condition) qui attend la fin du processus. Par exemple, après soumission d’un job Batch, on peut insérer un job Condition qui interroge CloudWatch ou l’API AWS Batch pour confirmer la fin avec succès. Pour Snowpipe, on peut configurer l’action Load Status qui attend automatiquement la fin. En cas de code de sortie « failed », Control-M interrompra le DAG. Ce schéma garantit que chaque étape ne déclenche la suivante qu’une fois la précédente validée (utilisation des dépendances et Conditions de Control-M). Les plannings SLA, retriggers ou notifications peuvent être associés aux jobs pour alerter en cas de retard ou d’échec.
+2. Connexion GitLab privé ↔ Snowflake
+Snowflake supporte nativement la connexion à des dépôts Git distants (GitHub, GitLab, Bitbucket, etc.) via un mécanisme de Git repository clone
+docs.snowflake.com
+. On crée un API INTEGRATION de type git_https_api avec un secret contenant un jeton d’accès HTTPS, puis un objet GIT REPOSITORY dans Snowflake qui clone le dépôt distant (via HTTPS)
+docs.snowflake.com
+docs.snowflake.com
+. Cela fonctionne même pour des repos privés, sous réserve que Snowflake puisse y accéder (internet). La commande SQL CREATE GIT REPOSITORY spécifie l’URL du dépôt, le secret (jeton), etc. Options sans PrivateLink :
+Intégration Git native Snowflake (HTTPS token) : c’est la méthode la plus simple. On attribue un rôle Snowflake au dépôt et le clone fait apparaître tout l’historique du projet dans un schéma Snowflake. Le déploiement s’effectue en ouvrant des scripts SQL depuis ce clone (via EXECUTE IMMEDIATE ou Snowflake CLI). Les avantages sont la centralisation dans Snowflake, la sécurité du dépôt (les secrets restent dans Snowflake), et l’auditabilité via ACCOUNT_USAGE. En revanche, cette intégration est tirée par Snowflake (rafraîchissement manuel ou programmé du clone) et il n’y a pas de trigger natif sur commit.
+GitLab CI/CD ou Webhook + Lambda : on peut configurer un hook GitLab sur push pour déclencher un pipeline AWS (par ex. un AWS Lambda ou CodePipeline) qui appelle Snowflake (via Snowflake Python Connector ou CLI). Par exemple, chaque push lance un job Lambda qui exécute un script SnowSQL/CLI (CREATE OR REPLACE TASK ...) ou insère du code sur un stage Snowflake. Cela offre plus de réactivité (déclenchement immédiat) et flexibilité, mais requiert du code et de la maintenance AWS. Les secrets (identifiants Snowflake) doivent être gérés dans Lambda ou Parameter Store. L’observabilité se fait via les logs Lambda/CloudWatch.
+Mirroring vers GitHub/Service externe : pour certains cas, on peut dupliquer le dépôt privé dans un Git public ou GitHub Enterprise reconnu par Snowflake. C’est moins sécurisé et peu pratique, donc rarement recommandé.
+Tableau comparatif (exemples) :
+Solution	Sécurité	Coût	Simplicité	Observabilité
+Snowflake Git Integration	Jeton stocké en tant que Secret (sécurisé)
+docs.snowflake.com
+. SSL sur HTTPS.	Usage Snowflake (crédits minimes)	Configuration Snowflake (unidirectionnel). Pas d’outils externes.	Audit des actions via ACCOUNT_USAGE, logs Snowflake.
+GitLab Webhook + Lambda	Requiert gestion sécurisée des clés (AWS IAM).	Coût Lambda (léger) + Glue/API Gateway	Plus de composants (API Gateway, Lambda).	Logs CloudWatch du Lambda + métriques.
+GitLab CI (runner)	Clé SSH ou token sur Runner (sécurisé).	Coût runner/Ci (variable)	Configure dans GitLab CI, gère tout côté CI.	Output CI/CD (GitLab UI) + Snowflake logs.
+
+En pratique, l’intégration Git native Snowflake est souvent privilégiée pour sa simplicité et le fait que tout reste dans l’écosystème Snowflake
+docs.snowflake.com
+. Les solutions webhook/CI sont plus complexes mais offrent un contrôle granulaire sur les déploiements.
+3. Snowflake SQL Tasks (serverless)
+Observabilité : Les tâches Snowflake s’exécutent « serverless » : on ne voit pas leurs logs sur des fichiers externes, mais on dispose de vues métastore. La vue ACCOUNT_USAGE TASK_HISTORY (ci-dessus) et la fonction INFORMATION_SCHEMA permettent de traquer chaque exécution (heure de début/fin, état, durée, message d’erreur, etc.)
+docs.snowflake.com
+. En particulier, TASK_HISTORY affiche la colonne STATE (SUCCEEDED/FAILED/CANCELLED) et les codes/message d’erreur si applicables
+docs.snowflake.com
+, ce qui permet d’alerter sur les échecs. De plus, le champ QUERY_ID renvoie à la requête sous-jacente, jointe à QUERY_HISTORY pour obtenir des détails d’exécution. Il faut noter une latence possible (jusqu’à 45 min) pour ACCOUNT_USAGE. Sinon, on peut interroger INFORMATION_SCHEMA ou mettre en place des tableaus temporaires de logs. Snowflake ne génère pas (encore) de journaux en streaming type CloudWatch. Versioning du code SQL : Il n’existe pas de gestion de versions automatique dans Snowflake (si ce n’est la vue TASK_VERSIONS en preview). On gère le code des tâches comme tout objet SQL : via des scripts DDL en code source. Les méthodes courantes incluent :
+Git + Snowflake CLI ou API : On écrit des scripts CREATE OR REPLACE TASK dans un dépôt Git. Le Snowflake CLI facilite l’intégration avec Git (le CLI se prête bien à la CI/CD et à la gestion de versions)
+docs.snowflake.com
+. Par exemple, on peut versionner tout le code de tâche dans GitHub et déployer via snowflake-cli ou snowsql dans un pipeline CI
+docs.snowflake.com
+docs.snowflake.com
+.
+Snowflake DevOps (Connecteur Git) : Comme vu au point précédent, on peut créer un clone Git dans Snowflake et utiliser EXECUTE IMMEDIATE FROM pour exécuter des fichiers SQL versionnés dans Snowflake
+docs.snowflake.com
+. Cela ouvre aussi la possibilité de templates Jinja pour paramétrer les tâches selon l’environnement.
+Outils tiers (Dyson, DBT, dbt-snowflake adapter) : Certains parlent de “Dyson” (maintien de l’historique des objets) ou de catalogues de versions, mais la plupart préfèrent Git standard.
+Bonnes pratiques CI/CD : On recommande de séparer environnements (DEV/TEST/PROD) via des bases Snowflake distinctes et de parameteriser le déploiement (par exemple avec des variables Jinja dans dbt ou scripts)
+docs.snowflake.com
+. Utiliser CREATE OR REPLACE permet des déploiements idempotents. Intégrer les tâches SQL dans un pipeline CI (GitLab CI ou autre) : à chaque commit, exécuter un job qui se connecte à Snowflake (via CLI ou Python Connector) pour appliquer les changements. On peut par exemple stocker les scripts DDL dans Git et invoquer SYSTEM$EXECUTE_QUERY ou CALL une procédure depuis la CI. Il faut aussi tester les tâches en dev en utilisant des jeux de données ou en mode SAFE_MODE de dbt/simulator avant production. Les logs de CI/CD et les métriques de Snowflake (QUERY_HISTORY) constituent l’observabilité principale des déploiements.
+4. DBT (Data Build Tool)
+Avantages en 0‑ops : DBT est conçu pour l’analytics engineering – il apporte aux transformations SQL les bonnes pratiques des devs logiciel : versionning Git, modèles (fichiers .sql) réutilisables, tests de données intégrés, documentation automatisée. Le moteur Jinja de dbt permet de générer dynamiquement du SQL : on peut utiliser des boucles (for), conditions (if) et abstraire des fragments SQL en macros réutilisables
+docs.getdbt.com
+. Par exemple, un même code de test ou une même fonction SQL peut être invoqué dans plusieurs modèles. La gestion des profiles de dbt permet de centraliser les paramètres de connexion (entrepôt, schéma, etc.), facilitant la transition “0 ops” vers Snowflake sans config lourde. DBT offre aussi un DSL pour déclarer des tests de qualité (unicité, non-nullité, custom tests) et génère une doc HTML des modèles. Tous ces atouts simplifient le développement et la maintenance dans un environnement serverless. DBT Snowflake vs dbt-core externe : Snowflake et dbt Labs ont annoncé des intégrations spécifiques (ex. Snowflake Container Services pour exécuter dbt dans Snowflake
+medium.com
+). On distingue :
+dbt runtime Snowflake (ex : Snowpark Container Services, dbt Cloud sur Snowflake) : les scripts DBT s’exécutent dans Snowflake même. Avantages : la data ne quitte pas Snowflake (sécurité/perf)
+medium.com
+, on pilote tout dans le même compte. Inconvénient : configuration plus lourde (création de pools conteneurs), nouveauté à maîtriser.
+dbt-core (containers/runners externes) : on fait tourner dbt sur un runner GitLab ou un container hébergé (ECS, Kubernetes, local). C’est la méthode traditionnelle : dbt compile le SQL, le dump sur Snowflake via snowsql. Avantages : on contrôle l’environnent (versions, dépendances Python), facile à intégrer dans n’importe quelle CI. Inconvénient : nécessite de gérer l’infra de calcul (même si léger), et potentiellement plus de latence réseau.
+Portabilité du code DBT hors Snowflake : Le code dbt (fichiers .sql + macros Jinja) est techniquement transférable car dbt existe pour d’autres bases (Postgres, BigQuery, etc.). Toutefois, les modèles écrits pour Snowflake exploitent souvent des fonctions spécifiques (p.ex. FLATTEN, types VARIANT, table functions propres)
+docs.snowflake.com
+. Ces éléments doivent être adaptés à une autre base. Les macros peuvent aider à isoler la logique spécifique, mais tout ce qui touche au SQL dialecte Snowflake (sémantiques du date, JSON, auto-clonage de tables, etc.) peut poser problème. Par exemple, FLATTEN n’a pas d’équivalent direct en Postgres. En conclusion, le cœur dbt (modularité, tests, Jinja) reste réutilisable, mais chaque modèle doit être revu si on change de plateforme – il faut donc limiter les fonctionnalités 100% Snowflake dans le code portable.
+5. Stratégies de transformation
+Comparaison de solutions : On compare trois approches principales pour les transformations :
+Snowpark (Python) : Exécuter du code Python avec la bibliothèque Snowpark dans Snowflake. Les données ne bougent pas, on profite du scale-out de l’entrepôt Snowflake. Avantage : très puissant pour les logiques complexes (ML, boucles, bibliothèques Python); performance optimisée (on « envoie le code vers la donnée »
+phdata.io
+). Inconvénients : coût (Snowpark consomme souvent plus de crédits que de simples requêtes SQL), learning curve pour les DataFrames Snowpark, et debug moins interactif (il faut déboguer via logs ou Notebook). Snowpark est peu portatif (code Python Snowpark).
+DBT (SQL) : Outil déclaratif SQL. Avantages : simplicité pour SQL-istes, transparence des coûts (SQL standard), gestion facile du DAG de modèles, intégration aux tests. DBT ne fait pas pousser de code hors Snowflake ; en interne, ce sont simplement des requêtes SQL compilées. Le coût de calcul reste celui des entrepôts Snowflake. L’optimisation est confiée à Snowflake (pruning de tables, etc.). Observabilité via les artefacts dbt (logs/manifest) et Snowflake (QUERY_HISTORY). Inconvénients : moins adapté aux algorithmes complexes (ML) ; peut générer beaucoup de petites requêtes.
+Scripts manuels (SnowSQL / PySnowflake) : Écrire ses propres scripts SQL exécutés via le client SnowSQL ou un script Python (PySnowflake). Avantage : contrôle total, flexibilité (n’importe quel script). Inconvénient : manque de structure (pas de DAG, pas de tests automatiques). Coût = crédit Snowflake selon calcul. Faible portabilité (scripts à adapter pour d’autres plateformes). Le debug est manuel (logs de la console). C’est le moins « plug-and-play » pour 0-ops, plus adapté pour des tâches ad-hoc ou migrations ponctuelles.
+Critères clés :
+Simplicité : DBT > Snowpark > scripts manuels.
+Coût : DBT/snowflake SQL n’a pas de coût supplémentaire au calcul Snowflake, Snowpark peut consommer plus de crédits (UDFs contiennent tout le bundle Python)
+phdata.io
+, scripts ont des coûts variables selon l’optimisation.
+Debuggage : DBT et SQL pur ont l’output de Snowflake et les docs/dbt logs; Snowpark moins intuitif, nécessite notebooks ou logs.
+Portabilité : DBT en SQL (sans fonctions exotiques) est plus portable qu’un script Python UDF. Le code Snowflake spécifique (p.ex. SESSION_PARAMETERS ou package numpy) ne l’est pas.
+Observabilité : Toutes produisent des métadonnées dans Snowflake (QUERY_HISTORY). DBT ajoute ses propres logs de build. Snowflake CLI/SnowSQL peut afficher les messages en temps réel. Snowpark n’a pas de logs séparés, juste les journaux de requêtes.
+En somme, pour des pipelines classiques « ELT » de données structurées, DBT est généralement la solution la plus simple et robuste. Snowpark est justifié pour des transformations avancées ou du machine learning « dans l’entrepôt », quand SQL pur n’est pas suffisant
+phdata.io
+. Les scripts manuels restent utiles pour des jobs très personnalisés, mais au prix d’un effort de maintenance plus élevé.
+6. Observabilité centralisée
+Collecte unifiée des logs/métriques : L’idéal est de rassembler les données de monitoring (logs d’exécution, métriques, traces) de AWS, Snowflake et Control-M dans un seul entrepôt d’observabilité. Quelques options :
+AWS native (CloudWatch & X-Ray) : On peut envoyer les logs AWS (EC2, Lambda, CloudTrail, Matillion, etc.) vers CloudWatch Logs central (log groups) et en agréger via CloudWatch Metrics Insight. Snowflake ne pousse pas directement de logs dans CloudWatch, mais on peut automatiser des COPY INTO depuis les vues ACCOUNT_USAGE (login_history, query_history…) vers un bucket S3, puis utiliser Lambda pour acheminer vers CloudWatch ou un datalake S3
+medium.com
+. Control-M peut publier ses logs ou alertes sur CloudWatch (via plugin ou webhook). Avantages : solution intégrée AWS (pas de coût de licence externe), dashboard CloudWatch natif. Inconvénients : CloudWatch Logs facture l’ingestion (env. $0.50/GB en ingestion) et nécessite un travail de pipeline pour Snowflake.
+S3 + Athena + Grafana (Open) : Solution économique : pousser tous les logs (Snowflake via UNLOAD vers S3, AWS via CloudTrail/S3 ou Kinesis, Control-M via export) dans des compartiments S3. Ensuite interroger ces logs avec Amazon Athena (SQL sur S3, tarif ~$5/TB scanné) et visualiser dans Grafana (gratuit) ou Amazon Managed Grafana. Grafana peut se connecter à Athena comme source de données, et même à Snowflake (plugin Enterprise)
+docs.aws.amazon.com
+. Avantages : coûts faibles (stockage S3 + requêtes Athena), haute scalabilité. Le signalement est cependant moins temps-réel qu’avec un SIEM.
+ELK (Elasticsearch) géré : Mettre en place Elastic (soit en self-hosted soit AWS OpenSearch Service) pour indexer les logs. Par exemple, on peut pousser les logs Snowflake unifiés (voir Globant
+medium.com
+) et AWS vers un cluster ES. Avantages : recherche rapide, alerting, Kibana. Inconvénients : coût important d’infra (noeuds ES), maintenance, montée en charge complexe.
+Datadog (ou autre SaaS) : Ingestion native de CloudWatch, Custom Metrics, logs Snowflake (via Agent Python), etc. Très simple d’usage (UI complète), inclut alerting et traces. Prix élevé (généralement à la volumétrie de logs+metrics). Recommandé si budget le permet et pour vitesse de déploiement.
+Recommandation d’architecture cible : Pour un équilibre coût/efficacité, on préconise souvent AWS Managed Grafana + Athena + S3. Par exemple, centraliser tous les logs dans S3 (via COPY Snowflake→S3
+medium.com
+ et export AWS natif), interroger via Athena et créer des tableaux de bord Grafana. AWS Managed Grafana permet de mélanger sources Athena (S3) et CloudWatch en un même dashboard
+docs.aws.amazon.com
+. On peut ainsi, par exemple, superposer graphiques de durée de requêtes Snowflake (depuis S3/Athena) et alarms CloudWatch AWS. Le coût est seulement celui du stockage S3 (quelques centimes/GB) et des requêtes Athena (~$5/TB scanné). Avantages/limites :
+S3+Athena – + Faible coût, très scalable, pas de composant serveur à gérer. – Latence (données batch), requiert gestion de pipeline UNLOAD.
+ELK / OpenSearch – + Temps-réel possible, recherche textuelle fine, riche écosystème Kibana. – – Beaucoup d’infra, coût fixe (node par heure), complexité d’administration.
+DataDog – + Très rapide à déployer, tout-en-un (logs/metrics/traces), alertes intégrées. – – Tarification élevée (notamment pour logs volumineux ou nombreux agents Control-M à monitorer).
+AWS natif – + Tout est dans AWS, intégration facile (AWS Distro for OpenTelemetry, CloudWatch metrics/logs, SNS alerts). – – Visibilité limitée à l’écosystème AWS. Nécessite créativité pour y intégrer Snowflake et Control-M (par ex. via scripts de PUSH).
+En résumé, archi cible : CloudWatch pour logs AWS + stockage S3 central + Athena pour les logs Snowflake + Managed Grafana pour les dashboards. Par exemple, un rôle Snowflake vidant périodiquement ACCOUNT_USAGE vers S3 (via COPY INTO en JSON
+medium.com
+), AWS CloudTrail configuré pour stocker logs CloudWatch/CloudTrail dans S3, et Grafana interrogeant ces trois sources. Cela minimise les coûts (quelques euros par mois pour S3/Athena) et offre une vue consolidée. Un petit cluster OpenSearch managé (AWS) est aussi envisageable si des requêtes textuelles très rapides sont nécessaires, mais à un budget plus élevé. Sources et références : Nous nous sommes appuyés sur la documentation Control-M (AWS Batch
+documents.bmc.com
+, Snowflake
+documents.bmc.com
+), sur les guides DevOps de Snowflake pour Git
+docs.snowflake.com
+docs.snowflake.com
+docs.snowflake.com
+, et sur la documentation Snowflake sur les vues métastores (TASK_HISTORY
+docs.snowflake.com
+) et les pratiques de log. Les solutions d’observabilité sont comparées selon les retours d’expérience et ressources techniques (ex. plateforme Grafana
+docs.aws.amazon.com
+).
