@@ -5,6 +5,10 @@ FROM @mystage
 PATTERN = '.*data\\.csv'
 """
 
+with conn.cursor() as cur:
+    cur.execute(query)                       # actually runs it in Snowflake
+    print("Rows returned:", cur.rowcount)    # -1 for unknown until fetched
+
 # Lire dans un DataFrame Pandas
 df = pd.read_sql(query, conn)
 
