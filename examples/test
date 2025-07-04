@@ -1,7 +1,8 @@
 query = """
 SELECT *
-FROM @mystage/data.csv
+FROM @mystage
 (FILE_FORMAT => (TYPE => 'CSV', SKIP_HEADER => 1, FIELD_OPTIONALLY_ENCLOSED_BY => '"'))
+PATTERN = '.*data\\.csv'
 """
 
 # Lire dans un DataFrame Pandas
