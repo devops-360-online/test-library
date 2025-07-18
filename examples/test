@@ -1,15 +1,13 @@
-OrdreTâche à exécuterResponsable directDétail de l’action1Inventorier les comptes LEGACY_SERVICEDBA / SecurityAdminsql<br>SELECT NAME, ENV FROM SNOWFLAKE.ACCOUNT_USAGE.USERS WHERE USER_TYPE='LEGACY_SERVICE';
-→ exporter CSV « inventaire_comptes ».2Tagger chaque compte par environnement (DEV / REC / PROD)Chef de projetAjouter colonne ENV dans le fichier.3Décider “downtime ?” compte par compteChef de projet + équipe appliMettre « OUI / NON » dans la colonne Downtime.4Geler les jobs (si downtime = OUI)Ops / OrchestrateurPause pipeline ou ALTER WAREHOUSE … SUSPEND;.5Créer ou modifier le compteDBA / SecurityAdminDowntime OUI :
-ALTER USER <user> SET TYPE=SERVICE;
-Downtime NON :
-CREATE USER <user>_SVC …6Générer le PAT (1 an)DBA / SecurityAdminALTER USER <user> ADD PAT <nom> DAYS_TO_EXPIRY=365;
-Copier token_secret.7Déposer le PAT dans le VaultSecOpsSecret path: vault://snowflake/<env>/<user>/pat.8Remplacer username/password → PATDevOps / Équipe appli CI/CD variables, Talend context param, Airflow connexions, etc.9Redémarrer les jobs / warehousesOpsALTER WAREHOUSE … RESUME; + relance pipeline.10Tester et validerÉquipe appliVérifier exécution OK, comparer sorties (shadow run si compte neuf).11Contrôle anti-passwordSecOpssql<br>SELECT COUNT(*) FROM ACCOUNT_USAGE.LOGIN_HISTORY WHERE USER_NAME='<user>' AND AUTHENTICATION_METHOD='PASSWORD' AND EVENT_TIMESTAMP >= DATEADD(day,-1,CURRENT_TIMESTAMP()); → doit = 0.12Clôturer le lot & reporterChef de projetMettre « Done » dans le suivi, informer le comité.
--- 
-
-
-
-
-
-
-Nasr LadibDevSecOps & Cloud Consultant ladibnasr@gmail.com +33 6 14 85 89 54 59000 Lille, France
- The content of this email is confidential and intended for the recipient specified in message only. It is strictly forbidden to share any part of this message with any third party, without a written consent of the sender. If you received this message by mistake, please reply to this message and follow with its deletion, so that we can ensure such a mistake does not occur in the future.
+Ordre,Tâche à exécuter,Responsable direct,Détail de l’action
+1,Inventorier les comptes LEGACY_SERVICE,DBA / SecurityAdmin,"sql SELECT NAME, ENV FROM SNOWFLAKE.ACCOUNT_USAGE.USERS WHERE USER_TYPE='LEGACY_SERVICE'; exporter CSV « inventaire_comptes »"
+2,Tagger chaque compte par environnement (DEV / REC / PROD),Chef de projet,"Ajouter colonne ENV dans le fichier."
+3,Décider “downtime ?” compte par compte,"Chef de projet + équipe appli","Mettre « OUI / NON » dans la colonne Downtime."
+4,Geler les jobs (si downtime = OUI),Ops / Orchestrateur,"Pause pipeline ou ALTER WAREHOUSE … SUSPEND;."
+5,Créer ou modifier le compte,DBA / SecurityAdmin,"Downtime OUI : ALTER USER <user> SET TYPE=SERVICE; Downtime NON : CREATE USER <user>_SVC …"
+6,Générer le PAT (1 an),DBA / SecurityAdmin,"ALTER USER <user> ADD PAT <nom> DAYS_TO_EXPIRY=365; Copier token_secret."
+7,Déposer le PAT dans le Vault,SecOps,"Secret path : vault://snowflake/<env>/<user>/pat."
+8,Remplacer username/password → PAT,DevOps / Équipe appli,"CI/CD variables, Talend context param, Airflow connexions, etc."
+9,Redémarrer les jobs / warehouses,Ops,"ALTER WAREHOUSE … RESUME; relance pipeline."
+10,Tester et valider,Équipe appli,"Vérifier exécution OK, comparer sorties (shadow run si compte neuf)."
+11,Contrôle anti-password,SecOps,"sql SELECT COUNT(*) FROM ACCOUNT_USAGE.LOGIN_HISTORY WHERE USER_NAME='<user>' AND AUTHENTICATION_METHOD='PASSWORD' AND EVENT_TIMESTAMP >= DATEADD(day,-1,CURRENT_TIMESTAMP()); doit = 0."
+12,Clôturer le lot & reporter,Chef de projet,"Mettre « Done » dans le suivi, informer le comité."
